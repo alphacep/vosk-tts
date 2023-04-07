@@ -33,7 +33,6 @@ class Synth:
                 "input": text,
                 "input_lengths": text_lengths,
                 "scales": scales,
-                "sid": None
             },
         )[0].squeeze((0, 1))
 
