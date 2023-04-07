@@ -57,7 +57,7 @@ def main():
         logging.info("Please specify input text or file")
         sys.exit(1)
 
-    model = Model(args.model)
+    model = Model(args.model, args.model_name, args.lang)
     synth = Synth(model)
     synth.synth(args.input, args.output)
 
