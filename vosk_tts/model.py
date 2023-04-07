@@ -12,6 +12,8 @@ from re import match
 from pathlib import Path
 from tqdm import tqdm
 
+from .g2p import convert
+
 # Remote location of the models and local folders
 MODEL_PRE_URL = "https://alphacephei.com/vosk/models/"
 MODEL_LIST_URL = MODEL_PRE_URL + "model-list.json"
@@ -138,8 +140,9 @@ class Model:
         phoneme_ids.extend(phoneme_id_map["^"])
         phoneme_ids.extend(phoneme_id_map["_"])
         for p in phonemes:
-            phoneme_ids.extend(phoneme_id_map[p])
-            phoneme_ids.extend(phoneme_id_map["_"])
+            if p in phoneme_id_map:
+                phoneme_ids.extend(phoneme_id_map[p])
+                phoneme_ids.extend(phoneme_id_map["_"])
         phoneme_ids.extend(phoneme_id_map["$"])
 
         print (text, phonemes, phoneme_ids)
