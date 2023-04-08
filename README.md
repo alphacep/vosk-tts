@@ -14,11 +14,13 @@ vosk-tts -n vosk-model-tts-ru-0.1-natasha --input "Привет мир!" --outpu
 
 ### API
 
+```
 from vosk_tts import Model, Synth
 model = Model(model_name="vosk-model-tts-ru-0.1-natasha")
 synth = Synth(model)
 
 synth.synth("Привет мир!", "test.wav")
+```
 
 ## Voices
 
