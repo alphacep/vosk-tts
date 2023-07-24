@@ -18,7 +18,7 @@ class Synth:
         audio_norm = audio_norm.astype("int16")
         return audio_norm
 
-    def synth(self, text, oname):
+    def synth_audio(self, text):
 
         phoneme_ids = self.model.g2p(text)
 
@@ -46,6 +46,11 @@ class Synth:
         )
 
         print("Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)" % (real_time_factor, infer_sec, audio_duration_sec))
+        return audio
+
+    def synth(self, text, oname):
+
+        audio = self.synth_audio(text)
 
         with wave.open(oname, "w") as f:
             f.setnchannels(1)

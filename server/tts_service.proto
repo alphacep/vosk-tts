@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package vosk.tts;
+
+message AudioFormatOptions {
+    oneof AudioFormat {
+        // The audio format specified in request parameters.
+        RawAudio raw_audio = 1;
+
+        // The audio format specified inside the container metadata.
+        ContainerAudio container_audio = 2;
+    }
+}
+
+message RawAudio {
+    enum AudioEncoding {
+        AUDIO_ENCODING_UNSPECIFIED = 0;
+
+        // Audio bit depth 16-bit signed little-endian (Linear PCM).
+        LINEAR16_PCM = 1;
+    }
+
+    // Encoding type.
+    AudioEncoding audio_encoding = 1;
+
+    // Sampling frequency of the signal.
+    int64 sample_rate_hertz = 2;
+}
+
+message ContainerAudio {
+    enum ContainerAudioType {
+        CONTAINER_AUDIO_TYPE_UNSPECIFIED = 0;
+
+        // Audio bit depth 16-bit signed little-endian (Linear PCM).
+        WAV = 1;
+
+        // Data is encoded using the OPUS audio codec and compressed using the OGG container format.
+        OGG_OPUS = 2;
+
+        // Data is encoded using MPEG-1/2 Layer III and compressed using the MP3 container format.
+        MP3 = 3;
+    }
+    ContainerAudioType container_audio_type = 1;
+}
+
+message UtteranceSynthesisResponse {
+    // Part of synthesized audio.
+    AudioChunk audio_chunk = 1;
+}
+
+message AudioChunk {
+    // Sequence of bytes of the synthesized audio in format specified in output_audio_spec.
+    bytes data = 1;
+}
+
+
+message Hints {
+    // The hint for TTS engine to specify synthesised audio characteristics. 
+    oneof Hint {
+
+        // Name of speaker to use.
+        string voice = 1;
+
+        // Hint to change speed.
+        double speed = 2;
+
+        // Hint to specify pronunciation character for the speaker.
+        string role = 3;
+    }
+}
+
+message UtteranceSynthesisRequest {
+
+    // The name of the model.
+    // Specifies basic synthesis functionality. Currently should be empty. Do not use it.
+    string model = 1;
+
+    // Text to synthesis, one of text synthesis markups.
+    oneof Utterance {
+        // Raw text (e.g. "Hello, Alice").
+        string text = 2;
+    }
+
+    // Optional hints for synthesis.
+    repeated Hints hints = 3;
+
+    // Optional. Default: 22050 Hz, linear 16-bit signed little-endian PCM, with WAV header
+    AudioFormatOptions output_audio_spec = 4;
+}
+
+service Synthesizer {
+    // Synthesizing text into speech.
+    rpc UtteranceSynthesis (UtteranceSynthesisRequest) returns (stream UtteranceSynthesisResponse) {
+    }
+}
