@@ -27,5 +27,5 @@ setuptools.setup(
     ],
     python_requires='>=3.7',
     setup_requires=['onnxruntime'],
-    install_requires=['onnxruntime'],
+    install_requires=['onnxruntime', 'tqdm'],
 )
