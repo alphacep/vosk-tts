@@ -43,7 +43,7 @@ class Model:
         self.onnx = onnxruntime.InferenceSession(str(model_path / "model.onnx"), sess_options=sess_options)
 
         self.dic = {}
-        for line in open(model_path / "dictionary"):
+        for line in open(model_path / "dictionary", encoding='utf-8'):
            items = line.split()
            self.dic[items[0]] = " ".join(items[1:])
 
