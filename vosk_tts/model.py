@@ -40,7 +40,7 @@ class Model:
 
         sess_options = onnxruntime.SessionOptions()
         print("Loading model from", model_path)
-        self.onnx = onnxruntime.InferenceSession(str(model_path / "model.onnx"), sess_options=sess_options)
+        self.onnx = onnxruntime.InferenceSession(str(model_path / "model.onnx"), sess_options=sess_options, providers=['CPUExecutionProvider'])
 
         self.dic = {}
         for line in open(model_path / "dictionary", encoding='utf-8'):
