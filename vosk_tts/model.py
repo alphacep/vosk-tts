@@ -119,11 +119,11 @@ class Model:
     def g2p(self, text):
 
         text = re.sub("—", "-", text)
-        text = re.sub("([!'(),-.:;?])", r' \1 ', text)
+        text = re.sub("([!\"'(),.:;?])", r' \1 ', text)
 
         phonemes = []
         for word in text.split():
-            if re.match("[!'(),-.:;?]", word):
+            if re.match("[!\"'(),-.:;?]", word) or word == '-':
                 phonemes.append(word)
                 continue
 

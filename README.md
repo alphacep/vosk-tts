@@ -29,5 +29,5 @@ For now we support several Russian voices
 | Voice                               | Sample             |
 |--------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
 |[vosk-model-tts-ru-0.3-natasha](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.3-natasha.zip)  | https://github.com/alphacep/vosk-tts/raw/master/samples/vosk-model-tts-ru-0.3-natasha.wav |
-|[vosk-model-tts-ru-0.1-irina](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.1-irina.zip)      | https://github.com/alphacep/vosk-tts/raw/master/samples/vosk-model-tts-ru-0.1-irina.wav   |
+|[vosk-model-tts-ru-0.3-irina](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.3-irina.zip)      | https://github.com/alphacep/vosk-tts/raw/master/samples/vosk-model-tts-ru-0.3-irina.wav   |
 |[vosk-model-tts-ru-0.1-tamara](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.1-tamara.zip)    | https://github.com/alphacep/vosk-tts/raw/master/samples/vosk-model-tts-ru-0.1-tamara.wav  |
