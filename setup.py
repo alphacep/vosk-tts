@@ -5,7 +5,7 @@ with open("README.md", "rb") as fh:
 
 setuptools.setup(
     name="vosk-tts",
-    version="0.3.50",
+    version="0.3.51",
     author="Alpha Cephei Inc",
     author_email="contact@alphacephei.com",
     description="Offline text to speech synthesis",
@@ -26,6 +26,5 @@ setuptools.setup(
         'Topic :: Software Development :: Libraries :: Python Modules'
     ],
     python_requires='>=3.7',
-    setup_requires=['onnxruntime'],
-    install_requires=['onnxruntime', 'tqdm'],
+    install_requires=['onnxruntime', 'tqdm', 'requests'],
 )

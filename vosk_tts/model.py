@@ -5,6 +5,7 @@ import json
 import re
 import onnxruntime
 import requests
+import logging
 
 from urllib.request import urlretrieve
 from zipfile import ZipFile
@@ -39,13 +40,17 @@ class Model:
             model_path = Path(model_path)
 
         sess_options = onnxruntime.SessionOptions()
-        print("Loading model from", model_path)
+        logging.info(f"Loading model from {model_path}")
         self.onnx = onnxruntime.InferenceSession(str(model_path / "model.onnx"), sess_options=sess_options, providers=['CPUExecutionProvider'])
 
         self.dic = {}
+        probs = {}
         for line in open(model_path / "dictionary", encoding='utf-8'):
            items = line.split()
-           self.dic[items[0]] = " ".join(items[1:])
+           prob = float(items[1])
+           if probs.get(items[0], 0) < prob:
+               self.dic[items[0]] = " ".join(items[2:])
+               probs[items[0]] = prob
 
         self.config = json.load(open(model_path / "config.json"))
 
@@ -119,18 +124,15 @@ class Model:
     def g2p(self, text):
 
         text = re.sub("—", "-", text)
-        text = re.sub("([!\"'(),.:;?])", r' \1 ', text)
 
+        pattern = "([,.?!;:\"() ])"
         phonemes = []
-        for word in text.split():
-            if re.match("[!\"'(),-.:;?]", word) or word == '-':
-                phonemes.append(word)
+        for word in re.split(pattern, text.lower()):
+            if word == "":
                 continue
-
-            word = word.lower()
-            if len(phonemes) > 0: phonemes.append(' ')
-
-            if word in self.dic:
+            if re.match(pattern, word) or word == '-':
+                phonemes.append(word)
+            elif word in self.dic:
                 phonemes.extend(self.dic[word].split())
             else:
                 phonemes.extend(convert(word).split())
@@ -145,6 +147,6 @@ class Model:
                 phoneme_ids.extend(phoneme_id_map["_"])
         phoneme_ids.extend(phoneme_id_map["$"])
 
-        print (text, phonemes, phoneme_ids)
-
+        logging.info(text)
+        logging.info(phonemes)
         return phoneme_ids

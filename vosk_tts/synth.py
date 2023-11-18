@@ -3,7 +3,7 @@ import numpy as np
 import onnxruntime
 import wave
 import time
-
+import logging
 
 class Synth:
 
@@ -48,7 +48,7 @@ class Synth:
             infer_sec / audio_duration_sec if audio_duration_sec > 0 else 0.0
         )
 
-        print("Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)" % (real_time_factor, infer_sec, audio_duration_sec))
+        logging.info("Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)" % (real_time_factor, infer_sec, audio_duration_sec))
         return audio
 
     def synth(self, text, oname):
