@@ -31,7 +31,7 @@ from vosk_tts import Model, Synth
 
 vosk_interface = os.environ.get('VOSK_SERVER_INTERFACE', '0.0.0.0')
 vosk_port = int(os.environ.get('VOSK_SERVER_PORT', 5001))
-vosk_model_path = os.environ.get('VOSK_MODEL_PATH', 'vosk-model-tts-ru-0.1-natasha')
+vosk_model_path = os.environ.get('VOSK_MODEL_PATH', 'vosk-model-tts-ru-0.4-natasha')
 vosk_threads = int(os.environ.get('VOSK_SERVER_THREADS', os.cpu_count() or 1))
 
 class SynthesizerServicer(tts_service_pb2_grpc.SynthesizerServicer):
