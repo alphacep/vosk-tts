@@ -26,7 +26,7 @@ synth.synth("Привет мир!", "out.wav")
 
 For now we support several Russian voices
 
-| Voice                                                                                                  |
-|--------------------------------------------------------------------------------------------------------|
-|[vosk-model-tts-ru-0.4-natasha](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-natasha.zip)  |
-|[vosk-model-tts-ru-0.4-irina](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-irina.zip)      |
+| Voice                                                                                                  | Example    |
+|--------------------------------------------------------------------------------------------------------|------------|
+|[vosk-model-tts-ru-0.4-natasha](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-natasha.zip)  | https://alphacephei.com/tts/vosk-model-tts-0.4-natasha.wav |
+|[vosk-model-tts-ru-0.4-irina](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-irina.zip)      | https://alphacephei.com/tts/vosk-model-tts-0.4-irina.wav |
