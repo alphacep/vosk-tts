@@ -9,6 +9,7 @@ class Synth:
 
     def __init__(self, model):
         self.model = model
+        self.multi = model.config["num_speakers"] > 1
 
     def audio_float_to_int16(self,
         audio: np.ndarray, max_wav_value: float = 32767.0
@@ -19,7 +20,7 @@ class Synth:
         audio_norm = audio_norm.astype("int16")
         return audio_norm
 
-    def synth_audio(self, text):
+    def synth_audio(self, text, speaker_id=0):
 
         phoneme_ids = self.model.g2p(text)
 
@@ -27,13 +28,21 @@ class Synth:
         text_lengths = np.array([text.shape[1]], dtype=np.int64)
         scales = np.array([0.66667, 1.0, 0.8], dtype=np.float32)
 
+        if self.multi:
+            # Assign first voice
+            if speaker_id is None:
+                speaker_id = 0
+            sid = np.array([speaker_id], dtype=np.int64)
+        else:
+            sid = None
+
         start_time = time.perf_counter()
         audio = self.model.onnx.run(
             None,
             {
                 "input": text,
                 "input_lengths": text_lengths,
-                "sid": None,
+                "sid": sid,
                 "scales": scales,
             },
         )[0]
@@ -51,9 +60,9 @@ class Synth:
         logging.info("Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)" % (real_time_factor, infer_sec, audio_duration_sec))
         return audio
 
-    def synth(self, text, oname):
+    def synth(self, text, oname, speaker_id=0):
 
-        audio = self.synth_audio(text)
+        audio = self.synth_audio(text, speaker_id)
 
         with wave.open(oname, "w") as f:
             f.setnchannels(1)

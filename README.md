@@ -9,24 +9,23 @@ Simple TTS based on VITS with some old ideas
 ```
 pip3 install vosk-tts
 
-vosk-tts -n vosk-model-tts-ru-0.4-natasha --input "Привет мир!" --output out.wav
+vosk-tts -n vosk-model-tts-ru-0.4-multi -s 2 --input "Привет мир!" --output out.wav
 ```
 
 ### API
 
 ```
 from vosk_tts import Model, Synth
-model = Model(model_name="vosk-model-tts-ru-0.4-natasha")
+model = Model(model_name="vosk-model-tts-ru-0.4-multi")
 synth = Synth(model)
 
-synth.synth("Привет мир!", "out.wav")
+synth.synth("Привет мир!", "out.wav", speaker_id=2)
 ```
 
 ## Voices
 
-For now we support several Russian voices
+For now we support several Russian voices 3 females and 2 males. Get the model here:
 
-| Voice                                                                                                  | Example    |
-|--------------------------------------------------------------------------------------------------------|------------|
-|[vosk-model-tts-ru-0.4-natasha](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-natasha.zip)  | https://alphacephei.com/tts/vosk-model-tts-0.4-natasha.wav |
-|[vosk-model-tts-ru-0.4-irina](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-irina.zip)      | https://alphacephei.com/tts/vosk-model-tts-0.4-irina.wav |
+[vosk-model-tts-ru-0.4-multi](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-multi.zip).
+
+You can use speaker IDs from 0 to 4 included.

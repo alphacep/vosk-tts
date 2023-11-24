@@ -15,9 +15,6 @@ parser.add_argument(
         "--model", "-m", type=str,
         help="model path")
 parser.add_argument(
-        "--server", "-s", const="ws://localhost:2701", action="store_const",
-        help="use server for synthesis")
-parser.add_argument(
         "--list-models", default=False, action="store_true",
         help="list available models")
 parser.add_argument(
@@ -32,6 +29,9 @@ parser.add_argument(
 parser.add_argument(
         "--input", "-i", type=str,
         help="input string")
+parser.add_argument(
+        "--speaker", "-s", type=int,
+        help="speaker id for multispeaker model")
 parser.add_argument(
         "--output", "-o", default="out.wav", type=str,
         help="optional output filename path")
@@ -59,7 +59,7 @@ def main():
 
     model = Model(args.model, args.model_name, args.lang)
     synth = Synth(model)
-    synth.synth(args.input, args.output)
+    synth.synth(args.input, args.output, args.speaker)
 
 if __name__ == "__main__":
     main()
