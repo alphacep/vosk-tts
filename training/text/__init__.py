@@ -30,7 +30,7 @@ wdic = {}
 for line in open("db/dictionary"):
     items = line.split()
     if items[0] not in wdic:
-        wdic[items[0]] = items[1:]
+        wdic[items[0]] = items[2:]
 
 from .ru_dictionary import convert
 
