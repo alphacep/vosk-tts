@@ -21,7 +21,7 @@ cd ..
 1) clone the pretrained model
 
 ```
-git clone https://huggingface.co/alphacep/vosk-tts-ru-multi
+git clone https://huggingface.co/alphacep/vosk-tts-ru-multi pretrained
 ```
 
 2) get a dictionary from existing model and put it into db/dictionary
