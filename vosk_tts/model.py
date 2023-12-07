@@ -147,6 +147,6 @@ class Model:
                 phoneme_ids.extend(phoneme_id_map["_"])
         phoneme_ids.extend(phoneme_id_map["$"])
 
-        logging.info(text)
-        logging.info(phonemes)
+        logging.info(f"Text: {text}")
+        logging.info(f"Phonemes: {phonemes}")
         return phoneme_ids

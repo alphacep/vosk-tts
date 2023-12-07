@@ -57,10 +57,11 @@ def serve():
     server = grpc.server(futures.ThreadPoolExecutor(vosk_threads))
     tts_service_pb2_grpc.add_SynthesizerServicer_to_server(SynthesizerServicer(), server)
 
-    server.add_insecure_port('{}:{}'.format(vosk_interface, vosk_port))
+    server.add_insecure_port(f"{vosk_interface}:{vosk_port}")
     server.start()
+    logging.info(f"Listening on {vosk_interface}:{vosk_port}")
     server.wait_for_termination()
 
 if __name__ == '__main__':
-    logging.basicConfig()
+    logging.basicConfig(level=logging.INFO)
     serve()
