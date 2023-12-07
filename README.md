@@ -26,6 +26,8 @@ synth.synth("Привет мир!", "out.wav", speaker_id=2)
 
 For now we support several Russian voices 3 females and 2 males. Get the model here:
 
-[vosk-model-tts-ru-0.4-multi](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-multi.zip).
+[vosk-model-tts-ru-0.4-multi](https://alphacephei.com/vosk/models/vosk-model-tts-ru-0.4-multi.zip)
 
 You can use speaker IDs from 0 to 4 included.
+
+We plan to add more voices and languages in the future.
