@@ -58,11 +58,11 @@ message Hints {
     // The hint for TTS engine to specify synthesised audio characteristics. 
     oneof Hint {
 
-        // Name of speaker to use.
-        string voice = 1;
+        // ID of speaker to use.
+        int64 speaker_id = 1;
 
-        // Hint to change speed.
-        double speed = 2;
+        // Hint to change speech rate.
+        double speech_rate = 2;
 
         // Hint to specify pronunciation character for the speaker.
         string role = 3;

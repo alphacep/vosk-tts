@@ -31,7 +31,7 @@ from vosk_tts import Model, Synth
 
 vosk_interface = os.environ.get('VOSK_SERVER_INTERFACE', '0.0.0.0')
 vosk_port = int(os.environ.get('VOSK_SERVER_PORT', 5001))
-vosk_model_path = os.environ.get('VOSK_MODEL_PATH', 'vosk-model-tts-ru-0.4-natasha')
+vosk_model_path = os.environ.get('VOSK_MODEL_PATH', 'vosk-model-tts-ru-0.4-multi')
 vosk_threads = int(os.environ.get('VOSK_SERVER_THREADS', os.cpu_count() or 1))
 
 class SynthesizerServicer(tts_service_pb2_grpc.SynthesizerServicer):
@@ -40,8 +40,17 @@ class SynthesizerServicer(tts_service_pb2_grpc.SynthesizerServicer):
         self.synth = Synth(self.model)
 
     def UtteranceSynthesis(self, request, context):
-        print (request)
-        audio = self.synth.synth_audio(request.text)
+
+        speaker_id = 0
+        speech_rate = 1.0
+
+        for hint in request.hints:
+            if hint.HasField("speaker_id"):
+                speaker_id = hint.speaker_id
+            if hint.HasField("speech_rate"):
+                speech_rate = int(hint.speech_rate)
+
+        audio = self.synth.synth_audio(request.text, speaker_id=speaker_id, speech_rate=speech_rate)
         yield tts_service_pb2.UtteranceSynthesisResponse(audio_chunk=tts_service_pb2.AudioChunk(data=audio.tobytes()))
 
 def serve():

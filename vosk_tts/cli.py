@@ -33,8 +33,8 @@ parser.add_argument(
         "--speaker", "-s", type=int,
         help="speaker id for multispeaker model")
 parser.add_argument(
-        "--speed", type=float, default=1.0,
-        help="speed of the synthesis")
+        "--speech-rate", "-r", type=float, default=1.0,
+        help="speech rate of the synthesis")
 parser.add_argument(
         "--output", "-o", default="out.wav", type=str,
         help="optional output filename path")
@@ -62,7 +62,7 @@ def main():
 
     model = Model(args.model, args.model_name, args.lang)
     synth = Synth(model)
-    synth.synth(args.input, args.output, args.speaker, args.speed)
+    synth.synth(args.input, args.output, args.speaker, args.speech_rate)
 
 if __name__ == "__main__":
     main()
