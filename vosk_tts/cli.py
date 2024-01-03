@@ -62,7 +62,7 @@ def main():
 
     model = Model(args.model, args.model_name, args.lang)
     synth = Synth(model)
-    synth.synth(args.input, args.output, args.speaker, args.speech_rate)
+    synth.synth(args.input, args.output, args.speaker, speech_rate=args.speech_rate)
 
 if __name__ == "__main__":
     main()
