@@ -20,13 +20,13 @@ class Synth:
         audio_norm = audio_norm.astype("int16")
         return audio_norm
 
-    def synth_audio(self, text, speaker_id=0, speech_rate=1.0):
+    def synth_audio(self, text, speaker_id=0, noise_level=0.666667, speech_rate=1.0, duration_noise_level=0.8):
 
         phoneme_ids = self.model.g2p(text)
 
         text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
         text_lengths = np.array([text.shape[1]], dtype=np.int64)
-        scales = np.array([0.66667, speech_rate, 0.8], dtype=np.float32)
+        scales = np.array([noise_level, speech_rate, duration_noise_level], dtype=np.float32)
 
         if self.multi:
             # Assign first voice
@@ -60,9 +60,9 @@ class Synth:
         logging.info("Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)" % (real_time_factor, infer_sec, audio_duration_sec))
         return audio
 
-    def synth(self, text, oname, speaker_id=0, speech_rate=1.0):
+    def synth(self, text, oname, speaker_id=0, noise_level=0.666667, speech_rate=1.0, duration_noise_level=0.8):
 
-        audio = self.synth_audio(text, speaker_id, speech_rate)
+        audio = self.synth_audio(text, speaker_id, noise_level, speech_rate, duration_noise_level)
 
         with wave.open(oname, "w") as f:
             f.setnchannels(1)
