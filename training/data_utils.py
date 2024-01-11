@@ -373,22 +373,25 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
         self.batch_size = batch_size
         self.boundaries = boundaries # [32, 300, 400, 500, 600, 700, 800, 900, 1000]
   
-        self.buckets, self.num_samples_per_bucket = self._create_buckets()
+        self.buckets, self.boundaries, self.num_samples_per_bucket = self._create_buckets()
         self.total_size = sum(self.num_samples_per_bucket)
         self.num_samples = self.total_size // self.num_replicas
   
     def _create_buckets(self):
-        buckets = [[] for _ in range(len(self.boundaries) - 1)]
+        init_buckets = [[] for _ in range(len(self.boundaries) - 1)]
         for i in range(len(self.lengths)):
             length = self.lengths[i]
             idx_bucket = self._bisect(length)
             if idx_bucket != -1:
-                buckets[idx_bucket].append(i)
+                init_buckets[idx_bucket].append(i)
   
-        for i in range(len(buckets) - 1, 0, -1):
-            if len(buckets[i]) == 0:
-                buckets.pop(i)
-                self.boundaries.pop(i+1)
+        # collect non-zero buckets
+        buckets = []
+        boundaries = []
+        for bucket, boundary in zip(init_buckets, self.boundaries):
+            if len(bucket) != 0:
+                buckets.append(bucket)
+                boundaries.append(boundary)
   
         num_samples_per_bucket = []
         for i in range(len(buckets)):
@@ -396,7 +399,8 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
             total_batch_size = self.num_replicas * self.batch_size
             rem = (total_batch_size - (len_bucket % total_batch_size)) % total_batch_size
             num_samples_per_bucket.append(len_bucket + rem)
-        return buckets, num_samples_per_bucket
+
+        return buckets, boundaries, num_samples_per_bucket
   
     def __iter__(self):
       # deterministically shuffle based on epoch
@@ -412,6 +416,7 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
               indices.append(list(range(len(bucket))))
   
       batches = []
+
       for i in range(len(self.buckets)):
           bucket = self.buckets[i]
           len_bucket = len(bucket)
