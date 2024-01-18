@@ -20,7 +20,7 @@ class Synth:
         audio_norm = audio_norm.astype("int16")
         return audio_norm
 
-    def synth_audio(self, text, speaker_id=0, noise_level=0.666667, speech_rate=1.0, duration_noise_level=0.8):
+    def synth_audio(self, text, speaker_id=0, noise_level=0.666667, speech_rate=1.0, duration_noise_level=0.8, scale = 1.0):
 
         phoneme_ids = self.model.g2p(text)
 
@@ -47,6 +47,7 @@ class Synth:
             },
         )[0]
         audio = audio.squeeze()
+        audio = audio * scale
 
         audio = self.audio_float_to_int16(audio)
         end_time = time.perf_counter()

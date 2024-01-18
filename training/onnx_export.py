@@ -27,7 +27,7 @@ from scipy import signal
 
 #- Variable section
 PATH_TO_CONFIG = "db-finetune/config.json" # path to config
-PATH_TO_MODEL = "db-finetune/out/G_1300.pth" # path to model
+PATH_TO_MODEL = "db-finetune/out/G_4300.pth" # path to model
 SPEAKER_ID = torch.LongTensor([0]) # sid
 SCALE_CONFIG = torch.FloatTensor([0.667, 1.0, 0.8]) # scales -> noise, noise_w, length
 OPSET_VERSION = 15
