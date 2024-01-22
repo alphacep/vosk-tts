@@ -31,16 +31,38 @@ def discriminator_loss(disc_real_outputs, disc_generated_outputs):
   return loss, r_losses, g_losses
 
 
-def generator_loss(disc_outputs):
+def generator_loss(disc_real_outputs, disc_generated_outputs):
   loss = 0
   gen_losses = []
-  for dg in disc_outputs:
+  for dg in disc_generated_outputs:
     dg = dg.float()
     l = torch.mean((1-dg)**2)
     gen_losses.append(l)
     loss += l
 
   return loss, gen_losses
+
+
+# From StyleTTS2
+# https://dl.acm.org/doi/abs/10.1145/3573834.3574506
+def discriminator_TPRLS_loss(disc_real_outputs, disc_generated_outputs):
+    loss = 0
+    for dr, dg in zip(disc_real_outputs, disc_generated_outputs):
+        tau = 0.04
+        m_DG = torch.median((dr-dg))
+        L_rel = torch.mean((((dr - dg) - m_DG)**2)[dr < dg + m_DG])
+        loss += tau - F.relu(tau - L_rel)
+    return loss
+
+
+def generator_TPRLS_loss(disc_real_outputs, disc_generated_outputs):
+    loss = 0
+    for dg, dr in zip(disc_real_outputs, disc_generated_outputs):
+        tau = 0.04
+        m_DG = torch.median((dr-dg))
+        L_rel = torch.mean((((dr - dg) - m_DG)**2)[dr < dg + m_DG])
+        loss += tau - F.relu(tau - L_rel)
+    return loss
 
 
 def kl_loss(z_p, logs_q, m_p, logs_p, z_mask):
