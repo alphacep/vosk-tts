@@ -15,12 +15,12 @@ class Synth:
         audio: np.ndarray, max_wav_value: float = 32767.0
     ) -> np.ndarray:
         """Normalize audio and convert to int16 range"""
-        audio_norm = audio * max_wav_value
+        audio_norm = audio * max_wav_value * 3.0
         audio_norm = np.clip(audio_norm, -max_wav_value, max_wav_value)
         audio_norm = audio_norm.astype("int16")
         return audio_norm
 
-    def synth_audio(self, text, speaker_id=0, noise_level=0.666667, speech_rate=1.0, duration_noise_level=0.8, scale = 1.0):
+    def synth_audio(self, text, speaker_id=0, noise_level=0.666667, speech_rate=1.0, duration_noise_level=0.8, scale=1.0):
 
         phoneme_ids = self.model.g2p(text)
 
