@@ -24,7 +24,7 @@ from data_utils import (
 )
 from models import (
     SynthesizerTrn,
-    MultiPeriodDiscriminator,
+    MultiPeriodMultiSpecDiscriminator,
     DurationDiscriminator,
     DurationDiscriminator2,
     AVAILABLE_FLOW_TYPES,
@@ -181,7 +181,7 @@ def run(rank, n_gpus, hps):
         mas_noise_scale_initial=mas_noise_scale_initial,
         noise_scale_delta=noise_scale_delta,
         **hps.model).cuda(rank)
-    net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).cuda(rank)
+    net_d = MultiPeriodMultiSpecDiscriminator(hps.model.use_spectral_norm).cuda(rank)
 
     optim_g = torch.optim.AdamW(
         net_g.parameters(),
