@@ -253,6 +253,9 @@ class OnnxSTFT(torch.nn.Module):
             stride=self.hop_length,
             padding=0)
 
+        # scale by hop ratio
+        inverse_transform *= float(self.filter_length) / self.hop_length
+
         inverse_transform = inverse_transform[:, :, int(self.filter_length/2):]
         inverse_transform = inverse_transform[:, :, :-int(self.filter_length/2):]
 
