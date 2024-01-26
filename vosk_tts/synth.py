@@ -26,7 +26,7 @@ class Synth:
 
         text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
         text_lengths = np.array([text.shape[1]], dtype=np.int64)
-        scales = np.array([noise_level, speech_rate, duration_noise_level], dtype=np.float32)
+        scales = np.array([noise_level, 1.0 / speech_rate, duration_noise_level], dtype=np.float32)
 
         if self.multi:
             # Assign first voice
