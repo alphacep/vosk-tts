@@ -1,0 +1,12 @@
+title1|test_data/3752-4944-0027.wav|test_data/p225_001.wav
+title2|test_data/p229_003.wav|test_data/p225_001.wav
+title3|test_data/p252_003.wav|test_data/p225_001.wav
+title4|test_data/p229_003.wav|test_data/p252_003.wav
+title5|test_data/p225_001.wav|test_data/p252_003.wav
+title6|test_data/LJ045-0246.wav|test_data/p229_003.wav
+title7|test_data/LJ045-0246.wav|test_data/p252_003.wav
+title8|test_data/LJ001-0001.wav|test_data/p252_003.wav
+title9|test_data/LJ001-0001.wav|test_data/p229_003.wav
+title10|test_data/p226_005.wav|test_data/p252_003.wav
+title11|test_data/p225_001.wav|test_data/p226_005.wav
+title12|test_data/LJ001-0001.wav|test_data/LJ045-0246.wav
