@@ -17,7 +17,7 @@ from pqmf import PQMF
 import commons
 import utils
 
-from data_utils_new_new import (
+from data_utils import (
   TextAudioSpeakerLoader,
   TextAudioSpeakerCollate,
   DistributedBucketSampler

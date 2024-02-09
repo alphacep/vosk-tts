@@ -12,6 +12,8 @@ from mel_processing import mel_spectrogram_torch
 import logging
 logging.getLogger('numba').setLevel(logging.WARNING)
 import torch.autograd.profiler as profiler
+import numpy as np
+from contentvec import HubertModelWithFinalProj
 
 ## check device
 if torch.cuda.is_available() is True:
@@ -43,10 +45,9 @@ if __name__ == "__main__":
     print("Loading checkpoint...")
     _ = utils.load_checkpoint(args.ptfile, net_g, None)
 
-    print(f"Loading hubert_soft checkpoint")
-    hubert_soft = torch.hub.load("bshall/hubert:main", f"hubert_soft").to(device)
-    print("Loaded soft hubert.")
-    
+    print(f"Loading contentvec checkpoint")
+    contentvec_extractor = HubertModelWithFinalProj.from_pretrained("lengyue233/content-vec-best").to(device).eval()
+
     print("Processing text...")
     titles, srcs, tgts = [], [], []
     with open(args.txtpath, "r") as f:
@@ -57,7 +58,6 @@ if __name__ == "__main__":
             tgts.append(tgt)
 
     print("Synthesizing...")
-
     with torch.no_grad():
         for line in tqdm(zip(titles, srcs, tgts)):
             title, src, tgt = line
@@ -77,22 +77,11 @@ if __name__ == "__main__":
             )
             # src
             wav_src, _ = librosa.load(src, sr=hps.data.sampling_rate)
-            wav_src = torch.from_numpy(wav_src).unsqueeze(0).unsqueeze(0).to(device)
-            print(wav_src.size())
-            #long running
-            #do something other
-            c = hubert_soft.units(wav_src)
+            wav_src = torch.from_numpy(wav_src).unsqueeze(0).to(device)
 
-            
-            
-            c=c.transpose(2,1)
-            #print(c.size())
+            c = contentvec_extractor.extract(wav_src).transpose(2,1)
+
             audio = net_g.infer(c, mel=mel_tgt)
-         
-            audio = audio[0][0].data.cpu().float().numpy()
-            if args.use_timestamp:
-                timestamp = time.strftime("%m-%d_%H-%M", time.localtime())
-                write(os.path.join(args.outdir, "{}.wav".format(timestamp+"_"+title)), hps.data.sampling_rate, audio)
-            else:
-                write(os.path.join(args.outdir, f"{title}.wav"), hps.data.sampling_rate, audio)
-            
+ 
+            audio = audio[0][0].data.cpu().float().numpy() * 32768.0
+            write(os.path.join(args.outdir, f"{title}.wav"), hps.data.sampling_rate, audio.astype(np.int16))

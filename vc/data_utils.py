@@ -6,10 +6,10 @@ import torch
 import torch.utils.data
 
 import commons 
+import utils
 from mel_processing import spectrogram_torch, spec_to_mel_torch
 from utils import load_wav_to_torch, load_filepaths_and_text, transform
-#import h5py
-
+from torch.utils.data import DataLoader
 
 """Multi speaker version"""
 class TextAudioSpeakerLoader(torch.utils.data.Dataset):
@@ -256,8 +256,8 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
 
     def __len__(self):
         return self.num_samples // self.batch_size
-import utils
-from torch.utils.data import DataLoader
+
+
 if __name__ == "__main__":
     hps = utils.get_hparams()
     train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps)

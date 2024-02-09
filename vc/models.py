@@ -822,7 +822,7 @@ class SynthesizerTrn(nn.Module):
 
     self.use_sdp = use_sdp
 
-    self.enc_p = PosteriorEncoder(256, inter_channels, hidden_channels, 5, 1, 16)#768, inter_channels, hidden_channels, 5, 1, 16)
+    self.enc_p = PosteriorEncoder(768, inter_channels, hidden_channels, 5, 1, 16)#256, inter_channels, hidden_channels, 5, 1, 16)
     
     if mb_istft_vits == True:
       print('Mutli-band iSTFT VITS')
