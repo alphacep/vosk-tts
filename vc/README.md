@@ -1,23 +1,49 @@
-# QuickVC
-This repository contains the open source code, audio samples and pretrained models of my paper: QuickVC: Any-to-many Voice Conversion Using Inverse Short-time Fourier Transform for Faster Conversion
-## [Demo Page](https://quickvc.github.io/quickvc-demo)
-<img src="qvcfinalwhite.png" width="100%">
+# This is an extention of standard VITS-based VC
 
-## [Pretrained Model](https://drive.google.com/drive/folders/1DF6RgIHHkn2aoyyUMt4_hPitKSc2YR9d?usp=share_link)
-Put pretrained model into logs/quickvc
+The codebase is based on [QuickVC](https://github.com/quickvc/QuickVC-VoiceConversion) but contains several modifications
+
+1. TPRLS GAN loss (from StyleTTS2)
+2. Multispectral GAN discriminator (Univnet/Vocos/StyleTTS2)
+3. Contentvec instead of Hubert
+
+## Pretrained model
+
+Pretrained model is available on hugginface:
+
+https://huggingface.co/alphacep/vosk-vc-ru
+
+## Results
+
+On Russian dataset we measure speaker similarity with Resemblyzer
+
+|Model                                 | Average similarity | Min similarity |
+|--------------------------------------|--------------------|----------------|
+|Original QuickVC (trained on VCTK)    |            0.667   | 0.477          |
+|Trained on Russian data               |            0.836   | 0.692          |
+|With contentvec                       |            0.880   | 0.712          |
+|--------------------------------------|--------------------|----------------|
+| Others                                                                     |
+|--------------------------------------|--------------------|----------------|
+|Openvoice EN                          |            0.800   | 0.653          |
+
+## TODO
+
+ - [] Test other VC methods (XTTS, GPT-Sovits, RVC, Unitspeech)
+ - [] Collect wideband dataset (currently 16khz)
+ - [] Add better speaker and style encoder (3dspeaker, Openvoice)
 
 ## Inference with pretrained model
+
 ```python
 python convert.py
 ```
 You can change convert.txt to select the target and source
+
 ## Preprocess
-1. Hubert-Soft
+
 ```python
-cd dataset
-python encode.py soft dataset/VCTK-16K dataset/VCTK-16K
+python encode.py dataset/VCTK-16K dataset/VCTK-16K
 ```
-2. Spectrogram resize data augumentation, please refer to [FreeVC](https://github.com/OlaWod/FreeVC).
 
 ## Train
 
@@ -25,22 +51,14 @@ python encode.py soft dataset/VCTK-16K dataset/VCTK-16K
 python train.py
 ```
 
-If you want to change the config and model name, change:
-```python
-parser.add_argument('-c', '--config', type=str, default="./configs/quickvc.json",help='JSON file for configuration')
-parser.add_argument('-m', '--model', type=str,default="quickvc",help='Model name')
-```                   
-in utils.py
-
-In order to use the sr during training, change [this part](https://github.com/quickvc/QuickVC-VoiceConversion/blob/277118de9c81d1689e16be8a43408eda4223553d/data_utils_new_new.py#L70) to
-```python
-i = random.randint(68,92)
-c_filename = filename.replace(".wav", f"_{i}.npy")
-```    
 ## References
-If you have any question about the decoder, refer to [MS-ISTFT-VITS](https://github.com/MasayaKawamura/MB-iSTFT-VITS).
 
-If you have any question about the Hubert-soft, refer to [Soft-VC](https://github.com/bshall/hubert).
+Initial approach [QuickVC](https://github.com/quickvc/QuickVC-VoiceConversion)
 
-If you have any question about the data augumentation, refer to [FreeVC](https://github.com/OlaWod/FreeVC).
-## If you meet any problem, welcome to contact with me.
+Better content/speaker decomposition [Contentvec](https://github.com/auspicious3000/contentvec)
+
+Fast MB-iSTFT decoder for VITS [MS-ISTFT-VITS](https://github.com/MasayaKawamura/MB-iSTFT-VITS).
+
+Hubert-soft [Soft-VC](https://github.com/bshall/hubert).
+
+Data augmentation (not implemented) [FreeVC](https://github.com/OlaWod/FreeVC).
