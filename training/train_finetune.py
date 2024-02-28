@@ -24,7 +24,7 @@ from data_utils import (
 )
 from models import (
     SynthesizerTrn,
-    MultiPeriodDiscriminator,
+    MultiPeriodMultiSpecDiscriminator,
     DurationDiscriminator,
     DurationDiscriminator2,
     AVAILABLE_FLOW_TYPES,
@@ -33,6 +33,8 @@ from models import (
 from losses import (
     generator_loss,
     discriminator_loss,
+    generator_TPRLS_loss,
+    discriminator_TPRLS_loss,
     feature_loss,
     kl_loss,
     subband_stft_loss
@@ -180,8 +182,7 @@ def run(rank, n_gpus, hps):
         mas_noise_scale_initial=mas_noise_scale_initial,
         noise_scale_delta=noise_scale_delta,
         **hps.model).cuda(rank)
-    net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).cuda(rank)
-
+    net_d = MultiPeriodMultiSpecDiscriminator(hps.model.use_spectral_norm).cuda(rank)
 
     optim_g = torch.optim.AdamW(
         net_g.parameters(),
@@ -322,7 +323,8 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
             y_d_hat_r, y_d_hat_g, _, _ = net_d(y, y_hat.detach())
             with autocast(enabled=False):
                 loss_disc, losses_disc_r, losses_disc_g = discriminator_loss(y_d_hat_r, y_d_hat_g)
-                loss_disc_all = loss_disc
+                loss_disc_tprls = discriminator_TPRLS_loss(y_d_hat_r, y_d_hat_g)
+                loss_disc_all = loss_disc + loss_disc_tprls
 
             # Duration Discriminator
             if net_dur_disc is not None:
@@ -355,7 +357,8 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.c_kl
 
                 loss_fm = feature_loss(fmap_r, fmap_g)
-                loss_gen, losses_gen = generator_loss(y_d_hat_g)
+                loss_gen, losses_gen = generator_loss(y_d_hat_r, y_d_hat_g)
+                loss_gen_tprls = generator_TPRLS_loss(y_d_hat_r, y_d_hat_g)
 
                 if hps.model.mb_istft_vits == True:
                     pqmf = PQMF(y.device)
@@ -364,9 +367,9 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 else:
                     loss_subband = torch.tensor(0.0)
 
-                loss_gen_all = loss_gen + loss_fm + loss_mel + loss_dur + loss_kl + loss_subband
+                loss_gen_all = loss_gen + loss_gen_tprls + loss_fm + loss_mel + loss_dur + loss_kl + loss_subband
                 if net_dur_disc is not None:
-                    loss_dur_gen, losses_dur_gen = generator_loss(y_dur_hat_g)
+                    loss_dur_gen, losses_dur_gen = generator_loss(y_dur_hat_r,  y_dur_hat_g)
                     loss_gen_all += loss_dur_gen
 
         optim_g.zero_grad()
@@ -393,6 +396,8 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 scalar_dict.update(
                     {"loss/g/fm": loss_fm, "loss/g/mel": loss_mel, "loss/g/dur": loss_dur, "loss/g/kl": loss_kl,
                      "loss/g/subband": loss_subband})
+
+                scalar_dict.update({"loss/d/tprls": loss_disc_tprls, "loss/g/tprls": loss_gen_tprls})
 
                 scalar_dict.update({"loss/g/{}".format(i): v for i, v in enumerate(losses_gen)})
                 scalar_dict.update({"loss/d_r/{}".format(i): v for i, v in enumerate(losses_disc_r)})
