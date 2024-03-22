@@ -1,0 +1,10 @@
+Russian TTS based on https://github.com/RVC-Boss/GPT-SoVITS
+
+# Pretrained models 
+
+
+
+# Inference
+
+Run `python3 inference_cli.py`
+
