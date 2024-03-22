@@ -2,7 +2,7 @@ Russian TTS based on https://github.com/RVC-Boss/GPT-SoVITS
 
 # Pretrained models 
 
-
+<https://huggingface.co/alphacep/vosk-tts-ru-gpt-sovits>
 
 # Inference
 
