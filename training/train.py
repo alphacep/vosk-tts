@@ -340,7 +340,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.c_kl
 
                 loss_fm = feature_loss(fmap_r, fmap_g)
-                loss_gen, losses_gen = generator_loss(y_d_hat_g)
+                loss_gen, losses_gen = generator_loss(y_d_hat_r, y_d_hat_g)
 
                 if hps.model.mb_istft_vits == True:
                     pqmf = PQMF(y.device)
@@ -351,7 +351,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 
                 loss_gen_all = loss_gen + loss_fm + loss_mel + loss_dur + loss_kl + loss_subband
                 if net_dur_disc is not None:
-                    loss_dur_gen, losses_dur_gen = generator_loss(y_dur_hat_g)
+                    loss_dur_gen, losses_dur_gen = generator_loss(y_dur_hat_r, y_dur_hat_g)
                     loss_gen_all += loss_dur_gen
 
         optim_g.zero_grad()

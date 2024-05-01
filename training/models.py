@@ -925,7 +925,7 @@ class iSTFT_Generator(torch.nn.Module):
                 self.resblocks.append(resblock(ch, k, d))
 
         self.post_n_fft = self.gen_istft_n_fft
-        self.conv_post = weight_norm(Conv1d(ch, self.post_n_fft + 2, 7, 1, padding=3))
+        self.conv_post = weight_norm(Conv1d(ch, self.post_n_fft + 2, 7, 1, padding=3, bias=False))
         self.ups.apply(init_weights)
         self.conv_post.apply(init_weights)
         self.reflection_pad = torch.nn.ReflectionPad1d((1, 0))
@@ -1000,7 +1000,7 @@ class Multiband_iSTFT_Generator(torch.nn.Module): # !
         self.reflection_pad = torch.nn.ReflectionPad1d((1, 0))
         self.reshape_pixelshuffle = []
 
-        self.subband_conv_post = weight_norm(Conv1d(ch, self.subbands * (self.post_n_fft + 2), 7, 1, padding=3))
+        self.subband_conv_post = weight_norm(Conv1d(ch, self.subbands * (self.post_n_fft + 2), 7, 1, padding=3, bias=False))
 
         self.subband_conv_post.apply(init_weights)
 
@@ -1059,6 +1059,8 @@ class Multiband_iSTFT_Generator(torch.nn.Module): # !
             remove_weight_norm(l)
         for l in self.resblocks:
             l.remove_weight_norm()
+        remove_weight_norm(self.conv_pre)
+        remove_weight_norm(self.conv_post)
 
 
 class Multistream_iSTFT_Generator(torch.nn.Module):
@@ -1162,6 +1164,9 @@ class Multistream_iSTFT_Generator(torch.nn.Module):
             remove_weight_norm(l)
         for l in self.resblocks:
             l.remove_weight_norm()
+        remove_weight_norm(self.conv_pre)
+        remove_weight_norm(self.subband_conv_post)
+        remove_weight_norm(self.multistream_conv_post)
 
 
 class DiscriminatorP(torch.nn.Module):
