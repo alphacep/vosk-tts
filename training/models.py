@@ -1060,7 +1060,7 @@ class Multiband_iSTFT_Generator(torch.nn.Module): # !
         for l in self.resblocks:
             l.remove_weight_norm()
         remove_weight_norm(self.conv_pre)
-        remove_weight_norm(self.conv_post)
+        remove_weight_norm(self.subband_conv_post)
 
 
 class Multistream_iSTFT_Generator(torch.nn.Module):
@@ -1252,8 +1252,8 @@ def AnotherSTFT(x, fft_size, hop_size, win_length, window):
 
     return torch.abs(x_stft).transpose(2, 1)
 
-class DiscriminatorSpec(nn.Module):
-    """docstring for Discriminator."""
+class DiscriminatorSpecNoband(nn.Module):
+    """Spectral discriminator from StyleTTS2. Not used, multiband version below used instead."""
 
     def __init__(self, fft_size=1024, shift_size=120, win_length=600, window="hann_window", use_spectral_norm=False):
         super(DiscriminatorSpec, self).__init__()
@@ -1288,20 +1288,90 @@ class DiscriminatorSpec(nn.Module):
 
         return torch.flatten(y, 1, -1), fmap
 
+from torchaudio.transforms import Spectrogram
+from einops import rearrange
+from typing import Any, Dict, Tuple, Union, Optional
+
+class DiscriminatorSpec(nn.Module):
+    def __init__(
+        self,
+        window_length: int,
+        num_embeddings: Optional[int] = None,
+        channels: int = 32,
+        hop_factor: float = 0.25,
+        bands: Tuple[Tuple[float, float], ...] = ((0.0, 0.1), (0.1, 0.25), (0.25, 0.5), (0.5, 0.75), (0.75, 1.0)),
+    ):
+        super().__init__()
+        self.window_length = window_length
+        self.hop_factor = hop_factor
+        self.spec_fn = Spectrogram(
+            n_fft=window_length, hop_length=int(window_length * hop_factor), win_length=window_length, power=None
+        )
+        n_fft = window_length // 2 + 1
+        bands = [(int(b[0] * n_fft), int(b[1] * n_fft)) for b in bands]
+        self.bands = bands
+        convs = lambda: nn.ModuleList(
+            [
+                weight_norm(nn.Conv2d(2, channels, (3, 9), (1, 1), padding=(1, 4))),
+                weight_norm(nn.Conv2d(channels, channels, (3, 9), (1, 2), padding=(1, 4))),
+                weight_norm(nn.Conv2d(channels, channels, (3, 9), (1, 2), padding=(1, 4))),
+                weight_norm(nn.Conv2d(channels, channels, (3, 9), (1, 2), padding=(1, 4))),
+                weight_norm(nn.Conv2d(channels, channels, (3, 3), (1, 1), padding=(1, 1))),
+            ]
+        )
+        self.band_convs = nn.ModuleList([convs() for _ in range(len(self.bands))])
+
+        if num_embeddings is not None:
+            self.emb = torch.nn.Embedding(num_embeddings=num_embeddings, embedding_dim=channels)
+            torch.nn.init.zeros_(self.emb.weight)
+
+        self.conv_post = weight_norm(nn.Conv2d(channels, 1, (3, 3), (1, 1), padding=(1, 1)))
+
+    def spectrogram(self, x):
+        # Remove DC offset
+        x = x - x.mean(dim=-1, keepdims=True)
+        # Peak normalize the volume of input audio
+        x = 0.8 * x / (x.abs().max(dim=-1, keepdim=True)[0] + 1e-9)
+        x = self.spec_fn(x)
+        x = torch.view_as_real(x)
+        x = rearrange(x, "b 1 f t c -> (b 1) c t f")
+        # Split into bands
+        x_bands = [x[..., b[0] : b[1]] for b in self.bands]
+        return x_bands
+
+    def forward(self, x: torch.Tensor, cond_embedding_id: torch.Tensor = None):
+        x_bands = self.spectrogram(x)
+        fmap = []
+        x = []
+        for band, stack in zip(x_bands, self.band_convs):
+            for i, layer in enumerate(stack):
+                band = layer(band)
+                band = torch.nn.functional.leaky_relu(band, 0.1)
+                if i > 0:
+                    fmap.append(band)
+            x.append(band)
+        x = torch.cat(x, dim=-1)
+        if cond_embedding_id is not None:
+            emb = self.emb(cond_embedding_id)
+            h = (emb.view(1, -1, 1, 1) * x).sum(dim=1, keepdims=True)
+        else:
+            h = 0
+        x = self.conv_post(x)
+        fmap.append(x)
+        x += h
+
+        return x, fmap
+
 
 class MultiResSpecDiscriminator(torch.nn.Module):
 
-    def __init__(self,
-                 fft_sizes=[1024, 2048, 512],
-                 hop_sizes=[120, 240, 50],
-                 win_lengths=[600, 1200, 240],
-                 window="hann_window"):
+    def __init__(self, fft_sizes=[1024, 2048, 512]):
 
         super(MultiResSpecDiscriminator, self).__init__()
         self.discriminators = nn.ModuleList([
-            DiscriminatorSpec(fft_sizes[0], hop_sizes[0], win_lengths[0], window),
-            DiscriminatorSpec(fft_sizes[1], hop_sizes[1], win_lengths[1], window),
-            DiscriminatorSpec(fft_sizes[2], hop_sizes[2], win_lengths[2], window)
+            DiscriminatorSpec(fft_sizes[0]),
+            DiscriminatorSpec(fft_sizes[1]),
+            DiscriminatorSpec(fft_sizes[2])
             ])
 
     def forward(self, y, y_hat):
@@ -1357,13 +1427,10 @@ class MultiPeriodMultiSpecDiscriminator(torch.nn.Module):
         discs = discs + [DiscriminatorP(i, use_spectral_norm=use_spectral_norm) for i in periods]
 
         fft_sizes=[1024, 2048, 512]
-        hop_sizes=[120, 240, 50]
-        win_lengths=[600, 1200, 240]
-        window = 'hann_window'
         discs = discs + [
-            DiscriminatorSpec(fft_sizes[0], hop_sizes[0], win_lengths[0], window),
-            DiscriminatorSpec(fft_sizes[1], hop_sizes[1], win_lengths[1], window),
-            DiscriminatorSpec(fft_sizes[2], hop_sizes[2], win_lengths[2], window)
+            DiscriminatorSpec(fft_sizes[0]),
+            DiscriminatorSpec(fft_sizes[1]),
+            DiscriminatorSpec(fft_sizes[2])
         ]
 
         self.discriminators = nn.ModuleList(discs)
