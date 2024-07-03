@@ -20,7 +20,16 @@ class Synth:
         audio_norm = audio_norm.astype("int16")
         return audio_norm
 
-    def synth_audio(self, text, speaker_id=0, noise_level=0.666667, speech_rate=1.0, duration_noise_level=0.8, scale=1.0):
+    def synth_audio(self, text, speaker_id=0, noise_level=None, speech_rate=None, duration_noise_level=None, scale=None):
+
+        if noise_level is None:
+            noise_level = self.model.config["inference"].get("noise_level", 0.66667)
+        if speech_rate is None:
+            speech_rate = self.model.config["inference"].get("speech_rate", 1.0)
+        if duration_noise_level is None:
+            duration_noise_level = self.model.config["inference"].get("duration_noise_level", 0.8)
+        if scale is None:
+            scale = self.model.config["inference"].get("scale", 1.0)
 
         phoneme_ids = self.model.g2p(text)
 
@@ -61,9 +70,9 @@ class Synth:
         logging.info("Real-time factor: %0.2f (infer=%0.2f sec, audio=%0.2f sec)" % (real_time_factor, infer_sec, audio_duration_sec))
         return audio
 
-    def synth(self, text, oname, speaker_id=0, noise_level=0.666667, speech_rate=1.0, duration_noise_level=0.8):
+    def synth(self, text, oname, speaker_id=0, noise_level=None, speech_rate=None, duration_noise_level=None, scale=None):
 
-        audio = self.synth_audio(text, speaker_id, noise_level, speech_rate, duration_noise_level)
+        audio = self.synth_audio(text, speaker_id, noise_level, speech_rate, duration_noise_level, scale)
 
         with wave.open(oname, "w") as f:
             f.setnchannels(1)
