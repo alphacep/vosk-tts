@@ -7,6 +7,7 @@ import math
 import sherpa_onnx
 import scipy
 from timeit import default_timer as timer
+import numpy as np
 
 def main(output_dir=""):
 
@@ -33,6 +34,8 @@ def main(output_dir=""):
             s = recognizer.create_stream()
             s.accept_waveform(sample_rate, samples / 32768)
             n_samples += len(samples)
+            tail_paddings = np.random.normal(0, 1, int(0.4 * sample_rate)) / 32768
+            s.accept_waveform(sample_rate, tail_paddings)
             streams.append(s)
         recognizer.decode_streams(streams)
         results = [s.result.text for s in streams]
