@@ -28,7 +28,8 @@ from models import (
     DurationDiscriminator,
     DurationDiscriminator2,
     AVAILABLE_FLOW_TYPES,
-    AVAILABLE_DURATION_DISCRIMINATOR_TYPES
+    AVAILABLE_DURATION_DISCRIMINATOR_TYPES,
+    WavLMDiscriminator
 )
 from losses import (
     generator_loss,
@@ -37,7 +38,8 @@ from losses import (
     discriminator_TPRLS_loss,
     feature_loss,
     kl_loss,
-    subband_stft_loss
+    subband_stft_loss,
+    WavLMLoss
 )
 from mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 from text.symbols import symbols
@@ -153,7 +155,8 @@ def run(rank, n_gpus, hps):
         elif duration_discriminator_type == "dur_disc_2":
             net_dur_disc = DurationDiscriminator2(
                 hps.model.hidden_channels,
-                hps.model.hidden_channels,
+#                hps.model.hidden_channels,
+                256,
                 3,
                 0.1,
                 gin_channels=hps.model.gin_channels if hps.data.n_speakers != 0 else 0,
@@ -172,6 +175,24 @@ def run(rank, n_gpus, hps):
         print("NOT using any duration discriminator like VITS1")
         net_dur_disc = None
         use_duration_discriminator = False
+
+    if ("use_wd" in hps.model.keys() and hps.model.use_wd):
+        net_wd = WavLMDiscriminator(
+            hps.model.slm_hidden,
+            hps.model.slm_nlayers,
+            hps.model.slm_initial_channel
+        ).cuda(rank)
+
+        wl = WavLMLoss(
+            hps.model.slm_model,
+            net_wd,
+            hps.data.sampling_rate,
+            hps.model.slm_sr,
+        ).to(rank)
+        print("Using WavLMDiscriminator")
+    else:
+        net_wd = None
+        wl = None
 
     net_g = SynthesizerTrn(
         len(symbols),
@@ -203,22 +224,58 @@ def run(rank, n_gpus, hps):
     else:
         optim_dur_disc = None
 
-    net_g = DDP(net_g, device_ids=[rank], find_unused_parameters=True)
-    net_d = DDP(net_d, device_ids=[rank], find_unused_parameters=True)
+    if net_wd:
+        optim_wd = torch.optim.AdamW(
+            net_wd.parameters(),
+            hps.train.learning_rate,
+            betas=hps.train.betas,
+            eps=hps.train.eps,
+        )
+    else:
+        optim_wd = None
 
-    if net_dur_disc is not None:  # 2의 경우
-        net_dur_disc = DDP(net_dur_disc, device_ids=[rank], find_unused_parameters=True)
+#    for param in net_d.parameters():
+#        param.requires_grad = False
+#    for param in net_g.parameters():
+#        param.requires_grad = False
+#    for param in net_g.dp.parameters():
+#        param.requires_grad = True
+#    for param in net_dur_disc.parameters():
+#        param.requires_grad = False
+#    for param in net_wd.parameters():
+#        param.requires_grad = False
 
-    try:
+#    net_g = DDP(net_g, device_ids=[rank], find_unused_parameters=True)
+#    net_d = DDP(net_d, device_ids=[rank], find_unused_parameters=True)
+
+#    if net_dur_disc is not None:  # 2의 경우
+#        net_dur_disc = DDP(net_dur_disc, device_ids=[rank], find_unused_parameters=True)
+
+#    if net_wd:
+#        net_wd = DDP(
+#            net_wd,
+#            device_ids=[rank],
+#            find_unused_parameters=True
+#        )
+
+    if True:
         _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), net_g,
                                                    optim_g)
-        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d,
+        _, _, _, _ = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d,
                                                    optim_d)
         if net_dur_disc is not None:
-            _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "DUR_*.pth"),
+            _, _, _, _ = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "DUR_*.pth"),
                                                        net_dur_disc, optim_dur_disc)
+
+        if net_wd:
+            _, _, _, _ = utils.load_checkpoint(
+                utils.latest_checkpoint_path(hps.model_dir, "WD_*.pth"),
+                net_wd,
+                optim_wd,
+            )
+
         global_step = (epoch_str - 1) * len(train_loader)
-    except:
+    else:
         epoch_str = 1
         global_step = 0
 
@@ -230,26 +287,35 @@ def run(rank, n_gpus, hps):
     else:
         scheduler_dur_disc = None
 
+    if net_wd:
+        scheduler_wd = torch.optim.lr_scheduler.ExponentialLR(
+            optim_wd, gamma=hps.train.lr_decay, last_epoch=epoch_str - 2
+        )
+    else:
+        scheduler_wd = None
+
     scaler = GradScaler(enabled=hps.train.fp16_run)
 
     for epoch in range(epoch_str, hps.train.epochs + 1):
         if rank == 0:
-            train_and_evaluate(rank, epoch, hps, [net_g, net_d, net_dur_disc], [optim_g, optim_d, optim_dur_disc],
-                               [scheduler_g, scheduler_d, scheduler_dur_disc], scaler, [train_loader, eval_loader],
+            train_and_evaluate(rank, epoch, hps, [net_g, net_d, net_dur_disc, wl, net_wd], [optim_g, optim_d, optim_dur_disc, optim_wd],
+                               [scheduler_g, scheduler_d, scheduler_dur_disc, scheduler_wd], scaler, [train_loader, eval_loader],
                                logger, [writer, writer_eval])
         else:
-            train_and_evaluate(rank, epoch, hps, [net_g, net_d, net_dur_disc], [optim_g, optim_d, optim_dur_disc],
-                               [scheduler_g, scheduler_d, scheduler_dur_disc], scaler, [train_loader, None], None, None)
+            train_and_evaluate(rank, epoch, hps, [net_g, net_d, net_dur_disc, wl, net_wd], [optim_g, optim_d, optim_dur_disc, optim_wd],
+                               [scheduler_g, scheduler_d, scheduler_dur_disc, scheduler_wd], scaler, [train_loader, None], None, None)
         scheduler_g.step()
         scheduler_d.step()
         if net_dur_disc is not None:
             scheduler_dur_disc.step()
+        if net_wd:
+            scheduler_wd.step()
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
-    net_g, net_d, net_dur_disc = nets
-    optim_g, optim_d, optim_dur_disc = optims
-    scheduler_g, scheduler_d, scheduler_dur_disc = schedulers
+    net_g, net_d, net_dur_disc, wl, net_wd = nets
+    optim_g, optim_d, optim_dur_disc, optim_wd = optims
+    scheduler_g, scheduler_d, scheduler_dur_disc, scheduler_wd = schedulers
     train_loader, eval_loader = loaders
     if writers is not None:
         writer, writer_eval = writers
@@ -261,15 +327,17 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
     net_d.train()
     if net_dur_disc is not None:
         net_dur_disc.train()
+    if net_wd:
+        net_wd.train()
 
     if rank == 0:
         loader = tqdm.tqdm(train_loader, desc='Loading train data')
     else:
         loader = train_loader
     for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(loader):
-        if net_g.module.use_noise_scaled_mas:
-            current_mas_noise_scale = net_g.module.mas_noise_scale_initial - net_g.module.noise_scale_delta * global_step
-            net_g.module.current_mas_noise_scale = max(current_mas_noise_scale, 0.0)
+        if net_g.use_noise_scaled_mas:
+            current_mas_noise_scale = net_g.mas_noise_scale_initial - net_g.noise_scale_delta * global_step
+            net_g.current_mas_noise_scale = max(current_mas_noise_scale, 0.0)
         x, x_lengths = x.cuda(rank, non_blocking=True), x_lengths.cuda(rank, non_blocking=True)
         spec, spec_lengths = spec.cuda(rank, non_blocking=True), spec_lengths.cuda(rank, non_blocking=True)
         y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
@@ -326,6 +394,17 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 grad_norm_dur_disc = commons.clip_grad_value_(net_dur_disc.parameters(), None)
                 scaler.step(optim_dur_disc)
 
+            if wl is not None and net_wd is not None:
+                with autocast(enabled=False):
+                   loss_slm = wl.discriminator(
+                       y.detach().squeeze(), y_hat.detach().squeeze()
+                   ).mean()
+                optim_wd.zero_grad()
+                scaler.scale(loss_slm).backward()
+                scaler.unscale_(optim_wd)
+                grad_norm_wd = commons.clip_grad_value_(net_wd.parameters(), None)
+                scaler.step(optim_wd)
+
         optim_d.zero_grad()
         scaler.scale(loss_disc_all).backward()
         scaler.unscale_(optim_d)
@@ -358,6 +437,12 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                     loss_dur_gen, losses_dur_gen = generator_loss(y_dur_hat_r,  y_dur_hat_g)
                     loss_gen_all += loss_dur_gen
 
+                if net_wd is not None:
+                    loss_lm = wl(y.detach().squeeze(), y_hat.squeeze()).mean()
+                    loss_lm_gen = wl.generator(y_hat.squeeze())
+                    loss_gen_all += loss_lm
+                    loss_gen_all += loss_lm_gen
+
         optim_g.zero_grad()
         scaler.scale(loss_gen_all).backward()
         scaler.unscale_(optim_g)
@@ -389,10 +474,20 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 scalar_dict.update({"loss/d_r/{}".format(i): v for i, v in enumerate(losses_disc_r)})
                 scalar_dict.update({"loss/d_g/{}".format(i): v for i, v in enumerate(losses_disc_g)})
 
-                # if net_dur_disc is not None:
-                #   scalar_dict.update({"loss/dur_disc_r" : f"{losses_dur_disc_r}"})
-                #   scalar_dict.update({"loss/dur_disc_g" : f"{losses_dur_disc_g}"})
-                #   scalar_dict.update({"loss/dur_gen" : f"{loss_dur_gen}"})
+                if net_dur_disc is not None:
+                   scalar_dict.update({"loss/dur_disc_r/{}".format(i): v for i, v in enumerate(losses_dur_disc_r)})
+                   scalar_dict.update({"loss/dur_disc_g/{}".format(i): v for i, v in enumerate(losses_dur_disc_g)})
+                   scalar_dict.update({"loss/dur_gen" : loss_dur_gen})
+
+                if net_wd:
+                    scalar_dict.update(
+                        {
+                            "loss/wd/total": loss_slm.item(),
+                            "loss/wd/lm": loss_lm.item(),
+                            "loss/wd/lm_gen": loss_lm_gen.item(),
+                            "grad_norm_wd": grad_norm_wd,
+                        }
+                    )
 
                 image_dict = {
                     "slice/mel_org": utils.plot_spectrogram_to_numpy(y_mel[0].data.cpu().numpy()),
@@ -412,9 +507,21 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                                       os.path.join(hps.model_dir, "G_{}.pth".format(global_step)))
                 utils.save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch,
                                       os.path.join(hps.model_dir, "D_{}.pth".format(global_step)))
+
+#                utils.save_checkpoint(net_g.dp, optim_g, hps.train.learning_rate, epoch,
+#                                      os.path.join(hps.model_dir, "DP_{}.pth".format(global_step)))
+
                 if net_dur_disc is not None:
                     utils.save_checkpoint(net_dur_disc, optim_dur_disc, hps.train.learning_rate, epoch,
                                           os.path.join(hps.model_dir, "DUR_{}.pth".format(global_step)))
+
+                if net_wd:
+                    utils.save_checkpoint(
+                        net_wd,
+                        optim_wd,
+                        hps.train.learning_rate,
+                        epoch,
+                        os.path.join(hps.model_dir, "WD_{}.pth".format(global_step)))
 
 #                prev_g = os.path.join(hps.model_dir, "G_{}.pth".format(global_step - 3 * hps.train.eval_interval))
 #                if os.path.exists(prev_g):
@@ -450,7 +557,7 @@ def evaluate(hps, generator, eval_loader, writer_eval):
             y_lengths = y_lengths[:1]
             speakers = speakers[:1]
             break
-        y_hat, y_hat_mb, attn, mask, *_ = generator.module.infer(x, x_lengths, speakers, max_len=1000)
+        y_hat, y_hat_mb, attn, mask, *_ = generator.infer(x, x_lengths, speakers, max_len=1000)
         y_hat_lengths = mask.sum([1, 2]).long() * hps.data.hop_length
 
         if hps.model.use_mel_posterior_encoder or hps.data.use_mel_posterior_encoder:

@@ -23,7 +23,7 @@ AVAILABLE_DURATION_DISCRIMINATOR_TYPES = {"dur_disc_1": "DurationDiscriminator",
 class StochasticDurationPredictor(nn.Module):
     def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_flows=4, gin_channels=0):
         super().__init__()
-        filter_channels = in_channels  # it needs to be removed from future version.
+        # filter_channels = in_channels  # it needs to be removed from future version.
         self.in_channels = in_channels
         self.filter_channels = filter_channels
         self.kernel_size = kernel_size
@@ -1451,6 +1451,55 @@ class MultiPeriodMultiSpecDiscriminator(torch.nn.Module):
         return y_d_rs, y_d_gs, fmap_rs, fmap_gs
 
 
+class WavLMDiscriminator(nn.Module):
+    """docstring for Discriminator."""
+
+    def __init__(
+        self, slm_hidden=768, slm_layers=13, initial_channel=64, use_spectral_norm=False
+    ):
+        super(WavLMDiscriminator, self).__init__()
+        norm_f = weight_norm if use_spectral_norm is False else spectral_norm
+        self.pre = norm_f(
+            Conv1d(slm_hidden * slm_layers, initial_channel, 1, 1, padding=0)
+        )
+
+        self.convs = nn.ModuleList(
+            [
+                norm_f(
+                    nn.Conv1d(
+                        initial_channel, initial_channel * 2, kernel_size=5, padding=2
+                    )
+                ),
+                norm_f(
+                    nn.Conv1d(
+                        initial_channel * 2,
+                        initial_channel * 4,
+                        kernel_size=5,
+                        padding=2,
+                    )
+                ),
+                norm_f(
+                    nn.Conv1d(initial_channel * 4, initial_channel * 4, 5, 1, padding=2)
+                ),
+            ]
+        )
+
+        self.conv_post = norm_f(Conv1d(initial_channel * 4, 1, 3, 1, padding=1))
+
+    def forward(self, x):
+        x = self.pre(x)
+
+        fmap = []
+        for l in self.convs:
+            x = l(x)
+            x = F.leaky_relu(x, LRELU_SLOPE)
+            fmap.append(x)
+        x = self.conv_post(x)
+        x = torch.flatten(x, 1, -1)
+
+        return x
+
+
 class SynthesizerTrn(nn.Module):
     """
   Synthesizer for Training
@@ -1573,7 +1622,7 @@ class SynthesizerTrn(nn.Module):
         )
 
         if use_sdp:
-            self.dp = StochasticDurationPredictor(hidden_channels, 192, 3, 0.5, 4, gin_channels=gin_channels)
+            self.dp = StochasticDurationPredictor(hidden_channels, 256, 3, 0.1, 4, gin_channels=gin_channels)
         else:
             self.dp = DurationPredictor(hidden_channels, 256, 3, 0.5, gin_channels=gin_channels)
 
