@@ -8,7 +8,7 @@ import time
 from timeit import default_timer as timer
 
 from vosk_tts import Model, Synth
-model = Model(model_name="vosk-model-tts-ru-0.6-multi")
+model = Model(model_name="vosk-model-tts-ru-0.7-multi")
 synth = Synth(model)
 
 def main_synth(model = None, out_dir=None):
