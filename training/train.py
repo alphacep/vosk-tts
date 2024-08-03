@@ -154,7 +154,7 @@ def run(rank, n_gpus, hps):
         elif duration_discriminator_type == "dur_disc_2":
             net_dur_disc = DurationDiscriminator2(
                 hps.model.hidden_channels,
-                hps.model.hidden_channels,
+                256,
                 3,
                 0.1,
                 gin_channels=hps.model.gin_channels if hps.data.n_speakers != 0 else 0,
