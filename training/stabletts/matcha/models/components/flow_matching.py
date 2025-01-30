@@ -30,7 +30,7 @@ class BASECFM(torch.nn.Module, ABC):
         self.estimator = None
 
     @torch.inference_mode()
-    def forward(self, mu, mask, n_timesteps, temperature=1.0, spks=None, cond=None):
+    def forward(self, mu, mask, n_timesteps, temperature=1.0, spks=None, cond=None, fake_speaker=None, fake_content=None):
         """Forward diffusion
 
         Args:
@@ -50,12 +50,15 @@ class BASECFM(torch.nn.Module, ABC):
         """
         z = torch.randn_like(mu) * temperature
         t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
+        t_span = 1 - torch.cos(t_span * 0.5 * torch.pi)
+
+
 #        return self.solve_heun(z, t_span=t_span, mu=mu, mask=mask, spks=spks, cond=cond, guidance_scale=0)
-        return self.solve_euler(z, t_span=t_span, mu=mu, mask=mask, spks=spks, cond=cond)
-#        return self.solve_euler(z, t_span=t_span, mu=mu, mask=mask, spks=spks, cond=cond, guidance_scale=0.5)
+#        return self.solve_euler(z, t_span=t_span, mu=mu, mask=mask, spks=spks, cond=cond)
+        return self.solve_euler(z, t_span=t_span, mu=mu, mask=mask, spks=spks, cond=cond, guidance_scale=0.5, fake_speaker=fake_speaker, fake_content=fake_content)
 
 
-    def solve_euler(self, x, t_span, mu, mask, spks, cond, training=False, guidance_scale=0.0):
+    def solve_euler(self, x, t_span, mu, mask, spks, cond, training=False, guidance_scale=0.0, fake_speaker=None, fake_content=None):
         """
         Fixed euler solver for ODEs.
         Args:
@@ -75,7 +78,7 @@ class BASECFM(torch.nn.Module, ABC):
         sol = []
         steps = 1
         while steps <= len(t_span) - 1:
-            dphi_dt = self.func_dphi_dt(x, mask, mu, t, spks, cond, training=training, guidance_scale=guidance_scale)
+            dphi_dt = self.func_dphi_dt(x, mask, mu, t, spks, cond, training=training, guidance_scale=guidance_scale, fake_speaker=fake_speaker, fake_content=fake_content)
             x = x + dt * dphi_dt
             t = t + dt
             sol.append(x)
@@ -159,12 +162,15 @@ class BASECFM(torch.nn.Module, ABC):
 
         return sol[-1]
 
-    def func_dphi_dt(self, x, mask, mu, t, spks, cond, training=False, guidance_scale=0.0):
+    def func_dphi_dt(self, x, mask, mu, t, spks, cond, training=False, guidance_scale=0.0, fake_speaker=None, fake_content=None):
         dphi_dt = self.estimator(x, mask, mu, t, spks)
 
         if guidance_scale > 0.0:
-            mu_avg = mu.mean(2, keepdims=True).expand_as(mu)
-            dphi_avg = self.estimator(x, mask, mu_avg, t, spks)
+
+            fake_speaker = fake_speaker.repeat(x.size(0), 1)
+            fake_content = fake_content.repeat(x.size(0), 1, x.size(-1))
+
+            dphi_avg = self.estimator(x, mask, fake_content, t, fake_speaker)
             dphi_dt = dphi_dt + guidance_scale * (dphi_dt - dphi_avg)
 
         return dphi_dt
