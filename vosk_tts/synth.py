@@ -35,7 +35,7 @@ class Synth:
 
         text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
         text_lengths = np.array([text.shape[1]], dtype=np.int64)
-        scales = np.array([noise_level, 1.0 / speech_rate, duration_noise_level], dtype=np.float32)
+        scales = np.array([noise_level, duration_noise_level, 1.0 / speech_rate], dtype=np.float32)
 
         if self.multi:
             # Assign first voice
@@ -45,14 +45,17 @@ class Synth:
         else:
             sid = None
 
+        bert = np.zeros((1, 768, text.shape[1]), dtype=np.float32)
+
         start_time = time.perf_counter()
         audio = self.model.onnx.run(
             None,
             {
-                "input": text,
-                "input_lengths": text_lengths,
-                "sid": sid,
+                "x": text,
+                "x_lengths": text_lengths,
                 "scales": scales,
+                "spks": sid,
+                "bert": bert,
             },
         )[0]
         audio = audio.squeeze()
