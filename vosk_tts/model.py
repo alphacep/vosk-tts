@@ -12,6 +12,8 @@ from zipfile import ZipFile
 from re import match
 from pathlib import Path
 from tqdm import tqdm
+from tokenizers.implementations import BertWordPieceTokenizer
+
 
 from .g2p import convert
 
@@ -53,6 +55,10 @@ class Model:
                probs[items[0]] = prob
 
         self.config = json.load(open(model_path / "config.json"))
+
+        self.tokenizer = BertWordPieceTokenizer(vocab=str(model_path / "bert/vocab.txt"), unk_token="[UNK]", lowercase=False)
+
+        self.bert_onnx = onnxruntime.InferenceSession(str(model_path / "bert/model.onnx"), sess_options=sess_options, providers=['CPUExecutionProvider'])
 
     def get_model_path(self, model_name, lang):
         if model_name is None:
@@ -121,32 +127,43 @@ class Model:
             return displayed
         return update_to
 
-    def g2p(self, text):
+    def g2p(self, text, embeddings):
 
         text = re.sub("—", "-", text)
 
         pattern = "([,.?!;:\"() ])"
-        phonemes = []
+        phonemes = ["^"]
+        phone_embeddings = [embeddings[0]]
+        word_index = 1
         for word in re.split(pattern, text.lower()):
             if word == "":
                 continue
             if re.match(pattern, word) or word == '-':
                 phonemes.append(word)
+                phone_embeddings.append(embeddings[word_index])
             elif word in self.dic:
-                phonemes.extend(self.dic[word].split())
+                for p in self.dic[word].split():
+                    phonemes.append(p)
+                    phone_embeddings.append(embeddings[word_index])
             else:
-                phonemes.extend(convert(word).split())
+                for p in convert(word).split():
+                    phonemes.append(p)
+                    phone_embeddings.append(embeddings[word_index])
+            if word != " ":
+                word_index = word_index + 1
+        phonemes.append("$")
+        phone_embeddings.append(embeddings[-1])
 
+        # Convert to ids and intersperse with blank
         phoneme_id_map = self.config["phoneme_id_map"]
-        phoneme_ids = []
-        phoneme_ids.extend(phoneme_id_map["^"])
-        phoneme_ids.extend(phoneme_id_map["_"])
-        for p in phonemes:
-            if p in phoneme_id_map:
-                phoneme_ids.extend(phoneme_id_map[p])
-                phoneme_ids.extend(phoneme_id_map["_"])
-        phoneme_ids.extend(phoneme_id_map["$"])
+        phoneme_ids = [phoneme_id_map[phonemes[0]]]
+        phone_embeddings_is = [phone_embeddings[0]]
+        for i in range(1, len(phonemes)):
+            phoneme_ids.append(0)
+            phoneme_ids.append(phoneme_id_map[phonemes[i]])
+            phone_embeddings_is.append(phone_embeddings[i])
+            phone_embeddings_is.append(phone_embeddings[i])
 
         logging.info(f"Text: {text}")
         logging.info(f"Phonemes: {phonemes}")
-        return phoneme_ids
+        return phoneme_ids, phone_embeddings_is

@@ -31,11 +31,29 @@ class Synth:
         if scale is None:
             scale = self.model.config["inference"].get("scale", 1.0)
 
-        phoneme_ids = self.model.g2p(text)
+        tokens = self.model.tokenizer.encode(text)
+        bert = self.model.bert_onnx.run(
+            None,
+            {
+               "input_ids": [tokens.ids],
+               "attention_mask": [tokens.attention_mask],
+               "token_type_ids": [tokens.type_ids],
+            }
+        )
+
+        # Select only first token in multitoken words
+        selected = [0]
+        for i, t in enumerate(tokens.tokens):
+            if t[0] != '#':
+                selected.append(i)
+        bert = bert[0][selected]
+
+        phoneme_ids, bert_embs = self.model.g2p(text, bert)
 
         text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
         text_lengths = np.array([text.shape[1]], dtype=np.int64)
         scales = np.array([noise_level, duration_noise_level, 1.0 / speech_rate], dtype=np.float32)
+        bert_embs = np.expand_dims(np.transpose(np.array(bert_embs, dtype=np.float32)), 0)
 
         if self.multi:
             # Assign first voice
@@ -45,8 +63,6 @@ class Synth:
         else:
             sid = None
 
-        bert = np.zeros((1, 768, text.shape[1]), dtype=np.float32)
-
         start_time = time.perf_counter()
         audio = self.model.onnx.run(
             None,
@@ -55,7 +71,7 @@ class Synth:
                 "x_lengths": text_lengths,
                 "scales": scales,
                 "spks": sid,
-                "bert": bert,
+                "bert": bert_embs,
             },
         )[0]
         audio = audio.squeeze()

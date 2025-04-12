@@ -26,5 +26,5 @@ setuptools.setup(
         'Topic :: Software Development :: Libraries :: Python Modules'
     ],
     python_requires='>=3.7',
-    install_requires=['onnxruntime', 'tqdm', 'requests'],
+    install_requires=['onnxruntime', 'tqdm', 'requests', 'tokenizers'],
 )
