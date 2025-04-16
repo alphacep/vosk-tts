@@ -30,7 +30,7 @@ class Synth:
         if scale is None:
             scale = self.model.config["inference"].get("scale", 1.0)
 
-        tokens = self.model.tokenizer.encode(text)
+        tokens = self.model.tokenizer.encode(text.replace("+", ""))
         bert = self.model.bert_onnx.run(
             None,
             {
