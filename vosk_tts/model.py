@@ -2,7 +2,6 @@ import os
 import sys
 import datetime
 import json
-import re
 import onnxruntime
 import requests
 import logging
@@ -13,9 +12,6 @@ from re import match
 from pathlib import Path
 from tqdm import tqdm
 from tokenizers.implementations import BertWordPieceTokenizer
-
-
-from .g2p import convert
 
 # Remote location of the models and local folders
 MODEL_PRE_URL = "https://alphacephei.com/vosk/models/"
@@ -56,9 +52,11 @@ class Model:
 
         self.config = json.load(open(model_path / "config.json"))
 
-        self.tokenizer = BertWordPieceTokenizer(vocab=str(model_path / "bert/vocab.txt"), unk_token="[UNK]", lowercase=True)
-
-        self.bert_onnx = onnxruntime.InferenceSession(str(model_path / "bert/model.onnx"), sess_options=sess_options, providers=['CPUExecutionProvider'])
+        if os.path.exists(model_path / "bert/vocab.txt"):
+            self.tokenizer = BertWordPieceTokenizer(vocab=str(model_path / "bert/vocab.txt"), unk_token="[UNK]", lowercase=False)
+            self.bert_onnx = onnxruntime.InferenceSession(str(model_path / "bert/model.onnx"), sess_options=sess_options, providers=['CPUExecutionProvider'])
+        else:
+            self.tokenizer = None
 
     def get_model_path(self, model_name, lang):
         if model_name is None:
@@ -127,43 +125,3 @@ class Model:
             return displayed
         return update_to
 
-    def g2p(self, text, embeddings):
-
-        text = re.sub("—", "-", text)
-
-        pattern = "([,.?!;:\"() ])"
-        phonemes = ["^"]
-        phone_embeddings = [embeddings[0]]
-        word_index = 1
-        for word in re.split(pattern, text.lower()):
-            if word == "":
-                continue
-            if re.match(pattern, word) or word == '-':
-                phonemes.append(word)
-                phone_embeddings.append(embeddings[word_index])
-            elif word in self.dic:
-                for p in self.dic[word].split():
-                    phonemes.append(p)
-                    phone_embeddings.append(embeddings[word_index])
-            else:
-                for p in convert(word).split():
-                    phonemes.append(p)
-                    phone_embeddings.append(embeddings[word_index])
-            if word != " ":
-                word_index = word_index + 1
-        phonemes.append("$")
-        phone_embeddings.append(embeddings[-1])
-
-        # Convert to ids and intersperse with blank
-        phoneme_id_map = self.config["phoneme_id_map"]
-        phoneme_ids = [phoneme_id_map[phonemes[0]]]
-        phone_embeddings_is = [phone_embeddings[0]]
-        for i in range(1, len(phonemes)):
-            phoneme_ids.append(0)
-            phoneme_ids.append(phoneme_id_map[phonemes[i]])
-            phone_embeddings_is.append(phone_embeddings[i])
-            phone_embeddings_is.append(phone_embeddings[i])
-
-        logging.info(f"Text: {text}")
-        logging.info(f"Phonemes: {phonemes}")
-        return phoneme_ids, phone_embeddings_is
