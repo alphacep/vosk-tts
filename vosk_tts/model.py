@@ -37,9 +37,12 @@ class Model:
         else:
             model_path = Path(model_path)
 
+        onnx_providers = onnxruntime.get_available_providers()
+        providers = [p for p in onnx_providers if p in ["CUDAExecutionProvider", "CUDAExecutionProvider"]]
+
         sess_options = onnxruntime.SessionOptions()
         logging.info(f"Loading model from {model_path}")
-        self.onnx = onnxruntime.InferenceSession(str(model_path / "model.onnx"), sess_options=sess_options, providers=['CPUExecutionProvider'])
+        self.onnx = onnxruntime.InferenceSession(str(model_path / "model.onnx"), sess_options=sess_options, providers=providers)
 
         self.dic = {}
         probs = {}
@@ -54,7 +57,7 @@ class Model:
 
         if os.path.exists(model_path / "bert/vocab.txt"):
             self.tokenizer = BertWordPieceTokenizer(vocab=str(model_path / "bert/vocab.txt"), unk_token="[UNK]", lowercase=False)
-            self.bert_onnx = onnxruntime.InferenceSession(str(model_path / "bert/model.onnx"), sess_options=sess_options, providers=['CPUExecutionProvider'])
+            self.bert_onnx = onnxruntime.InferenceSession(str(model_path / "bert/model.onnx"), sess_options=sess_options, providers=providers)
         else:
             self.tokenizer = None
 
