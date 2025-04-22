@@ -5,10 +5,10 @@ import json
 import onnxruntime
 import requests
 import logging
+import re
 
 from urllib.request import urlretrieve
 from zipfile import ZipFile
-from re import match
 from pathlib import Path
 from tqdm import tqdm
 from tokenizers.implementations import BertWordPieceTokenizer
@@ -47,10 +47,10 @@ class Model:
         self.dic = {}
         probs = {}
         for line in open(model_path / "dictionary", encoding='utf-8'):
-           items = line.split()
+           items = line.split(maxsplit=2)
            prob = float(items[1])
            if probs.get(items[0], 0) < prob:
-               self.dic[items[0]] = " ".join(items[2:])
+               self.dic[items[0]] = items[2]
                probs[items[0]] = prob
 
         self.config = json.load(open(model_path / "config.json"))
@@ -91,7 +91,7 @@ class Model:
                 continue
             model_file_list = os.listdir(directory)
             model_file = [model for model in model_file_list if
-                    match(r"vosk-model(-small)?-{}".format(lang), model)]
+                    re.match(r"vosk-model(-small)?-{}".format(lang), model)]
             if model_file != []:
                 return Path(directory, model_file[0])
         response = requests.get(MODEL_LIST_URL, timeout=10)
