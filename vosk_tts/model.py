@@ -38,7 +38,7 @@ class Model:
             model_path = Path(model_path)
 
         onnx_providers = onnxruntime.get_available_providers()
-        providers = [p for p in onnx_providers if p in ["CUDAExecutionProvider", "CUDAExecutionProvider"]]
+        providers = [p for p in onnx_providers if p in ["CUDAExecutionProvider", "CPUExecutionProvider"]]
 
         sess_options = onnxruntime.SessionOptions()
         logging.info(f"Loading model from {model_path}")
