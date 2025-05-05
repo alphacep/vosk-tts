@@ -173,7 +173,8 @@ class Synth:
         # Convert to ids and intersperse with blank
         phoneme_id_map = self.model.config["phoneme_id_map"]
         if isinstance(phoneme_id_map[phonemes[0]], list):
-            phoneme_ids = phoneme_id_map[phonemes[0]]
+            phoneme_ids = []
+            phoneme_ids.extend(phoneme_id_map[phonemes[0]])
             for i in range(1, len(phonemes)):
                 phoneme_ids.append(0)
                 phoneme_ids.extend(phoneme_id_map[phonemes[i]])
