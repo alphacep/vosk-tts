@@ -52,9 +52,15 @@ class Synth:
         if scale is None:
             scale = self.model.config["inference"].get("scale", 1.0)
 
-        if self.model.tokenizer != None:
+        text = re.sub("—", "-", text)
+
+        if self.model.tokenizer != None and self.model.config.get("no_blank", 0) == 0:
             bert = self.get_word_bert(text)
             phoneme_ids, bert_embs = self.g2p(text, bert)
+            bert_embs = np.expand_dims(np.transpose(np.array(bert_embs, dtype=np.float32)), 0)
+        elif self.model.tokenizer != None and self.model.config.get("no_blank", 0) != 0:
+            bert = self.get_word_bert(text)
+            phoneme_ids, bert_embs = self.g2p_noblank(text, bert)
             bert_embs = np.expand_dims(np.transpose(np.array(bert_embs, dtype=np.float32)), 0)
         else:
             phoneme_ids = self.g2p_noembed(text)
@@ -110,9 +116,6 @@ class Synth:
             f.writeframes(audio.tobytes())
 
     def g2p(self, text, embeddings):
-
-        text = re.sub("—", "-", text)
-
         pattern = "([,.?!;:\"() ])"
         phonemes = ["^"]
         phone_embeddings = [embeddings[0]]
@@ -150,11 +153,40 @@ class Synth:
         logging.info(f"Phonemes: {phonemes}")
         return phoneme_ids, phone_embeddings_is
 
+    def g2p_noblank(self, text, embeddings):
+        pattern = "([,.?!;:\"() ])"
+        phonemes = ["^"]
+        phone_embeddings = [embeddings[0]]
+        word_index = 1
+        for word in re.split(pattern, text.lower()):
+            if word == "":
+                continue
+            if re.match(pattern, word) or word == '-':
+                phonemes.append(word)
+                phone_embeddings.append(embeddings[word_index])
+            elif word in self.model.dic:
+                for p in self.model.dic[word].split():
+                    phonemes.append(p)
+                    phone_embeddings.append(embeddings[word_index])
+            else:
+                for p in convert(word).split():
+                    phonemes.append(p)
+                    phone_embeddings.append(embeddings[word_index])
+            if word != " ":
+                word_index = word_index + 1
+        phonemes.append("$")
+        phone_embeddings.append(embeddings[-1])
+
+        # Convert to ids and intersperse with blank
+        phoneme_id_map = self.model.config["phoneme_id_map"]
+        phoneme_ids = [phoneme_id_map[p] for p in phonemes]
+
+        logging.info(f"Text: {text}")
+        logging.info(f"Phonemes: {phonemes}")
+        return phoneme_ids, phone_embeddings
+
 
     def g2p_noembed(self, text):
-
-        text = re.sub("—", "-", text)
-
         pattern = "([,.?!;:\"() ])"
         phonemes = ["^"]
         for word in re.split(pattern, text.lower()):
