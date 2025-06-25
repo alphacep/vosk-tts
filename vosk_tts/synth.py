@@ -22,7 +22,7 @@ class Synth:
         audio_norm = audio_norm.astype("int16")
         return audio_norm
 
-    def get_word_bert(self, text):
+    def get_word_bert(self, text, nopunc=False):
         tokens = self.model.tokenizer.encode(text.replace("+", ""))
         bert = self.model.bert_onnx.run(
             None,
@@ -33,13 +33,16 @@ class Synth:
             }
         )[0]
 
-        # Select only first token in multitoken words
-        selected = [0]
+
+        pattern = "[-,.?!;:\"]"
+        selected = []
         for i, t in enumerate(tokens.tokens):
             if t[0] != '#':
-                selected.append(i)
+                if not (nopunc and re.match(pattern, t)):
+                    selected.append(i)
         bert = bert[selected]
         return bert
+
 
     def synth_audio(self, text, speaker_id=0, noise_level=None, speech_rate=None, duration_noise_level=None, scale=None):
 
@@ -52,23 +55,34 @@ class Synth:
         if scale is None:
             scale = self.model.config["inference"].get("scale", 1.0)
 
+        text = text.strip()
         text = re.sub("—", "-", text)
 
-        if self.model.tokenizer != None and self.model.config.get("no_blank", 0) == 0:
-            bert = self.get_word_bert(text)
-            phoneme_ids, bert_embs = self.g2p(text, bert)
+        if self.model.tokenizer != None and self.model.config.get("model_type") == "multistream_v1":
+            bert = self.get_word_bert(text, nopunc=True)
+            phoneme_ids, bert_embs = self.g2p_multistream(text, bert)
             bert_embs = np.expand_dims(np.transpose(np.array(bert_embs, dtype=np.float32)), 0)
+            text = np.expand_dims(np.transpose(np.array(phoneme_ids, dtype=np.int64)), 0)
+            text_lengths = np.array([text.shape[2]], dtype=np.int64)
         elif self.model.tokenizer != None and self.model.config.get("no_blank", 0) != 0:
             bert = self.get_word_bert(text)
             phoneme_ids, bert_embs = self.g2p_noblank(text, bert)
             bert_embs = np.expand_dims(np.transpose(np.array(bert_embs, dtype=np.float32)), 0)
+            text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
+            text_lengths = np.array([text.shape[1]], dtype=np.int64)
+        elif self.model.tokenizer != None and self.model.config.get("no_blank", 0) == 0:
+            bert = self.get_word_bert(text)
+            phoneme_ids, bert_embs = self.g2p(text, bert)
+            bert_embs = np.expand_dims(np.transpose(np.array(bert_embs, dtype=np.float32)), 0)
+            text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
+            text_lengths = np.array([text.shape[1]], dtype=np.int64)
         else:
             phoneme_ids = self.g2p_noembed(text)
             bert_embs = np.zeros((1, 768, len(phoneme_ids)), dtype=np.float32)
+            text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
+            text_lengths = np.array([text.shape[1]], dtype=np.int64)
 
         # Run main prediction
-        text = np.expand_dims(np.array(phoneme_ids, dtype=np.int64), 0)
-        text_lengths = np.array([text.shape[1]], dtype=np.int64)
         scales = np.array([noise_level, 1.0 / speech_rate, duration_noise_level], dtype=np.float32)
 
         # Assign first voice
@@ -219,3 +233,86 @@ class Synth:
         logging.info(f"Text: {text}")
         logging.info(f"Phonemes: {phonemes}")
         return phoneme_ids
+
+    def g2p_multistream(self, text, bert_embeddings):
+        phonemes = [("^", [], 0, 0)]
+
+        pattern = "(\.\.\.|- |[ ,.?!;:\"()])"
+        text = text.replace(" -", "- ") # Unify dash with other punctuations
+
+        in_quote = 0
+        cur_punc = []
+        bert_word_index = 1
+
+        for word in re.split(pattern, text.lower()):
+            if word == "":
+                continue
+
+            if word == "\"":
+                if in_quote == 1:
+                    in_quote = 0
+                else:
+                    in_quote = 1
+                continue
+
+            if word == "- " or word == "-":
+                cur_punc.append('-')
+                continue
+
+            if re.match(pattern, word) and word != " ":
+                cur_punc.append(word)
+                continue
+
+            if word == " ":
+                phonemes.append((' ', cur_punc, in_quote, bert_word_index))
+                cur_punc = []
+                continue
+
+            if word in self.model.dic:
+                cur_punc = []
+                for p in self.model.dic[word].split():
+                    phonemes.append((p, [], in_quote, bert_word_index))
+            else:
+                cur_punc = []
+                for p in convert(word).split():
+                     phonemes.append((p, [], in_quote, bert_word_index))
+
+            bert_word_index = bert_word_index + 1
+
+        phonemes.append((" ", cur_punc, in_quote, bert_word_index))
+        phonemes.append(("$", [], 0, bert_word_index))
+
+
+        last_punc = " "
+        last_sentence_punc = " "
+
+        lp_phonemes = []
+        phone_bert_embeddings = []
+        phoneme_id_map = self.model.config["phoneme_id_map"]
+
+        for p in reversed(phonemes):
+            if "..." in p[1]:
+                last_sentence_punc = "..."
+            elif "." in p[1]:
+                last_sentence_punc = "."
+            elif "!" in p[1]:
+                last_sentence_punc = "!"
+            elif "?" in p[1]:
+                last_sentence_punc = "?"
+            elif "-" in p[1]:
+                last_sentence_punc = "-"
+
+            if len(p[1]) > 0:
+                last_punc = p[1][0]
+
+            if len(p[1]) > 0:
+                cur_punc = p[1][0]
+            else:
+                cur_punc = "_"
+
+            lp_phonemes.append((phoneme_id_map[p[0]], phoneme_id_map[cur_punc], p[2], phoneme_id_map[last_punc], phoneme_id_map[last_sentence_punc]))
+            phone_bert_embeddings.append(bert_embeddings[p[3]])
+        lp_phonemes = list(reversed(lp_phonemes))
+        phone_bert_embeddings = list(reversed(phone_bert_embeddings))
+
+        return lp_phonemes, phone_bert_embeddings
