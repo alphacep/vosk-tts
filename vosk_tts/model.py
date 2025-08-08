@@ -41,6 +41,7 @@ class Model:
         providers = [p for p in onnx_providers if p in ["CUDAExecutionProvider", "CPUExecutionProvider"]]
 
         sess_options = onnxruntime.SessionOptions()
+#        sess_options.log_severity_level = 0
         logging.info(f"Loading model from {model_path}")
         self.onnx = onnxruntime.InferenceSession(str(model_path / "model.onnx"), sess_options=sess_options, providers=providers)
 

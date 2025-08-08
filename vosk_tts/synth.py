@@ -58,7 +58,13 @@ class Synth:
         text = text.strip()
         text = re.sub("—", "-", text)
 
-        if self.model.tokenizer != None and self.model.config.get("model_type") == "multistream_v1":
+        if self.model.tokenizer != None and self.model.config.get("model_type") == "multistream_v2":
+            bert = self.get_word_bert(text, nopunc=True)
+            phoneme_ids, bert_embs = self.g2p_multistream(text, bert, word_pos=True)
+            bert_embs = np.expand_dims(np.transpose(np.array(bert_embs, dtype=np.float32)), 0)
+            text = np.expand_dims(np.transpose(np.array(phoneme_ids, dtype=np.int64)), 0)
+            text_lengths = np.array([text.shape[2]], dtype=np.int64)
+        elif self.model.tokenizer != None and self.model.config.get("model_type") == "multistream_v1":
             bert = self.get_word_bert(text, nopunc=True)
             phoneme_ids, bert_embs = self.g2p_multistream(text, bert)
             bert_embs = np.expand_dims(np.transpose(np.array(bert_embs, dtype=np.float32)), 0)
@@ -234,7 +240,23 @@ class Synth:
         logging.info(f"Phonemes: {phonemes}")
         return phoneme_ids
 
-    def g2p_multistream(self, text, bert_embeddings):
+
+    def add_pos(self, x):
+        if len(x) == 1:
+            return [x[0] + "_S"]
+
+        res = []
+        for i, p in enumerate(x):
+            if i == 0:
+                res.append(p + "_B")
+            elif i == len(x) - 1:
+                res.append(p + "_E")
+            else:
+                res.append(p + "_I")
+        return res
+
+
+    def g2p_multistream(self, text, bert_embeddings, word_pos=False):
         phonemes = [("^", [], 0, 0)]
 
         pattern = "(\.\.\.|- |[ ,.?!;:\"()])"
@@ -269,13 +291,17 @@ class Synth:
                 continue
 
             if word in self.model.dic:
-                cur_punc = []
-                for p in self.model.dic[word].split():
-                    phonemes.append((p, [], in_quote, bert_word_index))
+                word_phonemes = self.model.dic[word].split()
             else:
-                cur_punc = []
-                for p in convert(word).split():
-                     phonemes.append((p, [], in_quote, bert_word_index))
+                word_phonemes = convert(word).split()
+
+            if word_pos:
+                word_phonemes = self.add_pos(word_phonemes)
+
+            for p in word_phonemes:
+                phonemes.append((p, [], in_quote, bert_word_index))
+
+            cur_punc = []
 
             bert_word_index = bert_word_index + 1
 
