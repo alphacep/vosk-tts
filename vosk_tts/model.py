@@ -57,7 +57,7 @@ class Model:
         self.config = json.load(open(model_path / "config.json"))
 
         if os.path.exists(model_path / "bert/vocab.txt"):
-            self.tokenizer = BertWordPieceTokenizer(vocab=str(model_path / "bert/vocab.txt"), unk_token="[UNK]", lowercase=False)
+            self.tokenizer = BertWordPieceTokenizer(vocab=str(model_path / "bert/vocab.txt"), unk_token="[UNK]", lowercase=True)
             self.bert_onnx = onnxruntime.InferenceSession(str(model_path / "bert/model.onnx"), sess_options=sess_options, providers=providers)
         else:
             self.tokenizer = None
