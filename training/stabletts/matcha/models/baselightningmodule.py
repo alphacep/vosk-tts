@@ -71,8 +71,8 @@ class BaseLightningClass(LightningModule, ABC):
         )
         return {
             "dur_loss": dur_loss,
-            "prior_loss": prior_loss,
             "diff_loss": diff_loss,
+            "prior_loss": prior_loss,
         }
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
@@ -139,6 +139,7 @@ class BaseLightningClass(LightningModule, ABC):
 
     def validation_step(self, batch: Any, batch_idx: int):
         loss_dict = self.get_losses(batch)
+        print ("Batch", batch["filepaths"], batch["x_texts"])
         self.log(
             "sub_loss/val_dur_loss",
             loss_dict["dur_loss"],
@@ -165,6 +166,10 @@ class BaseLightningClass(LightningModule, ABC):
         )
 
         total_loss = sum(loss_dict.values())
+
+        print ("Total loss", total_loss)
+        print ("Losses", loss_dict)
+
         self.log(
             "loss/val",
             total_loss,
@@ -224,5 +229,5 @@ class BaseLightningClass(LightningModule, ABC):
                 )
 
     def on_before_optimizer_step(self, optimizer):
-#        self.log_dict({f"grad_norm/{k}": v for k, v in grad_norm(self, norm_type=2).items()})
+#         self.log_dict({f"grad_norm/{k}": v for k, v in grad_norm(self, norm_type=2).items()})
          return

@@ -35,7 +35,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         out_size,
         optimizer=None,
         scheduler=None,
-        prior_loss=True,
         use_precomputed_durations=False,
     ):
         super().__init__()
@@ -47,11 +46,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.spk_emb_dim = spk_emb_dim
         self.n_feats = n_feats
         self.out_size = out_size
-        self.prior_loss = prior_loss
         self.use_precomputed_durations = use_precomputed_durations
 
         if n_spks > 1:
             self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.dur_spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
 
         self.encoder = TextEncoder(
             encoder.encoder_type,
@@ -64,7 +63,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.dp = DP(duration_predictor)
 
         self.decoder = CFM(
-            in_channels=2 * encoder.encoder_params.n_feats,
+            in_channels=336,
             out_channel=encoder.encoder_params.n_feats,
             cfm_params=cfm,
             decoder_params=decoder,
@@ -72,23 +71,27 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spk_emb_dim=spk_emb_dim,
         )
 
-#        for param in self.parameters():
-#            param.requires_grad = False
-#        for param in self.encoder.parameters():
-#            param.requires_grad = True
-#        for param in self.decoder.parameters():
-#            param.requires_grad = False
-
 
         # uncondition input for cfg
         self.fake_speaker = torch.nn.Parameter(torch.zeros(1, spk_emb_dim))
-        self.fake_content = torch.nn.Parameter(torch.zeros(1, encoder.encoder_params.n_feats, 1))
+        self.fake_content = torch.nn.Parameter(torch.zeros(1, 256, 1))
+
         self.cfg_dropout = 0.1
+#        self.cfg_dropout = 0.0
+
+        for param in self.parameters():
+            param.requires_grad = False
+        for param in self.decoder.parameters():
+            param.requires_grad = True
+
+        torch.set_printoptions(precision=3)
+        torch.set_printoptions(profile='full')
+        torch.set_printoptions(linewidth=100000)
 
         self.update_data_statistics(data_statistics)
 
     @torch.inference_mode()
-    def synthesise(self, x, x_lengths, n_timesteps, temperature=1.0, dp_temperature=0.7, spks=None, bert=None, length_scale=1.0):
+    def synthesise(self, x, x_lengths, n_timesteps, temperature=1.0, dp_temperature=0.7, spks=None, bert=None, length_scale=1.0, phone_duration_extra=None):
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -125,32 +128,35 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # For RTF computation
         t = dt.datetime.now()
 
+        spks_orig = spks
+        x_orig = x
         if self.n_spks > 1:
             # Get speaker embedding
             spks = self.spk_emb(spks.long())
+        dur_spks = self.dur_spk_emb(spks_orig.long())
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, x, mu_dp, x_dp, x_mask = self.encoder(x, x_lengths, spks, bert)
+        x, x_mel, mu_mel, x_dp, mu_dp, x_mask = self.encoder(x, x_lengths, spks, dur_spks, bert)
 
         # Get log-scaled token durations `logw`
         logw = self.dp(mu_dp, x_mask, dp_temperature)
 
-#        w = torch.exp(logw) * x_mask
-#        w_round = torch.clamp_min(torch.round(w), 1)
-
         logw = torch.sigmoid(logw).sum(axis=1, keepdim=True)
-        w_round = torch.round(logw).clamp(min=1)
 
-        torch.set_printoptions(profile='full')
-        torch.set_printoptions(linewidth=20000)
+#        if (spks_orig[0].item() == 1):
+#            logw = logw * 1.1
 
-        print (w_round)
+#        phone_duration_extra[0, 24] = 50
+
+        logw = torch.where(phone_duration_extra == 0, logw, phone_duration_extra)
+
+        w_round = torch.round(logw * length_scale).clamp(min=1)
 
 #        from matcha.text import _id_to_symbol
+#        start = 0
 #        for i in range(x_lengths[0]):
-#             if _id_to_symbol[x[0,i].item()] in ["r", "rj", "l", "lj"] and w_round[0,0,i] <= 3.0:
-#                  w_round[0,0,i] = w_round[0,0,i] + 2.0
-#             print (f"{_id_to_symbol[x[0,i].item()]} {w[0,0,i].item():.4f} {w_round[0, 0, i].item():.4f}")
+#             print (f"{_id_to_symbol[x_orig[0,0,i].item()]} {start * 256. / 22050:.4f} {logw[0,0,i].item():.4f}")
+#             start = start + w_round[0,0,i].item()
 
         y_lengths = torch.sum(w_round, [1, 2]).long()
         y_max_length = y_lengths.max()
@@ -162,13 +168,35 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         attn = generate_path(w_round.squeeze(1), attn_mask.squeeze(1)).unsqueeze(1)
 
         # Align encoded text and get mu_y
-        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), x.transpose(1, 2))
         mu_y = mu_y.transpose(1, 2)
-        encoder_outputs = mu_y[:, :, :y_max_length]
+
+        # Align encoded text with mel-spectrogram and get mu_y segment
+        pau_mel = torch.matmul(attn.squeeze(1).transpose(1, 2), phone_duration_extra.unsqueeze(0).transpose(1,2)).transpose(1, 2)
+#        print (pau_mel)
+
+        # Align encoded text with mel-spectrogram and get mu_y segment
+        mu_y_mel = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_mel.transpose(1, 2))
+        mu_y_mel = mu_y_mel.transpose(1, 2)
+        encoder_outputs = mu_y_mel[:, :, :y_max_length]
 
         # Generate sample tracing the probability flow
         decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, temperature, spks, None, self.fake_speaker, self.fake_content)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
+
+        sil_mel = decoder_outputs[0, :, 0]
+
+#        print (sil_mel)
+#
+#        for i in range(y_max_length):
+#           if pau_mel[0, 0, i] > 0:
+#               decoder_outputs[0, :, i] = sil_mel
+
+        sil_mel_expanded = sil_mel.view(1, -1, 1)
+        condition = pau_mel[:, :, :y_max_length] > 0
+        condition = condition.expand(-1, decoder_outputs.size(1), -1)
+        decoder_outputs = torch.where(condition, sil_mel_expanded, decoder_outputs)
+
 
         t = (dt.datetime.now() - t).total_seconds()
         rtf = t * 22050 / (decoder_outputs.shape[-1] * 256)
@@ -204,9 +232,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks (torch.Tensor, optional): speaker ids.
                 shape: (batch_size,)
         """
-        if self.n_spks > 1:
-            # Get speaker embedding
-            spks = self.spk_emb(spks)
+
+        spks_orig = spks
+        spks = self.spk_emb(spks_orig)
+        dur_spks = self.dur_spk_emb(spks_orig)
+        x_orig = x
 
 #        print (cfg_mask)
 #        print (spks)
@@ -215,7 +245,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 #        print (self.fake_speaker)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, x, mu_dp, x_dp, x_mask = self.encoder(x, x_lengths, spks, bert)
+        x, x_mel, mu_mel, x_dp, mu_dp, x_mask = self.encoder(x, x_lengths, spks, dur_spks, bert)
 
         y_max_length = y.shape[-1]
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
@@ -224,75 +254,55 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         if self.use_precomputed_durations:
             attn = generate_path(durations.squeeze(1), attn_mask.squeeze(1))
-        else:
-            # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
-            with torch.no_grad():
-                const = -0.5 * math.log(2 * math.pi) * self.n_feats
-                factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
-                y_square = torch.matmul(factor.transpose(1, 2), y**2)
-                y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
-                mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
-                log_prior = y_square - y_mu_double + mu_square + const
-
-                attn = monotonic_align.maximum_path(log_prior, attn_mask.squeeze(1))
-                attn = attn.detach()  # b, t_text, T_mel
+#        else:
+#            # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
+#            with torch.no_grad():
+#                const = -0.5 * math.log(2 * math.pi) * self.n_feats
+#                factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
+#                y_square = torch.matmul(factor.transpose(1, 2), y**2)
+#                y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
+#                mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
+#                log_prior = y_square - y_mu_double + mu_square + const
+#
+#                attn = monotonic_align.maximum_path(log_prior, attn_mask.squeeze(1))
+#                attn = attn.detach()  # b, t_text, T_mel
 
         # Compute loss between predicted log-scaled durations and those obtained from MAS
         # refered to as prior loss in the paper
         #logw_ = torch.log(1e-8 + torch.sum(attn.unsqueeze(1), -1)) * x_mask
         logw_ = torch.sum(attn.unsqueeze(1), -1) * x_mask
-        dur_loss = self.dp.compute_loss(logw_, mu_dp, x_mask)
 
-        # Cut a small segment of mel-spectrogram in order to increase batch size
-        #   - "Hack" taken from Grad-TTS, in case of Grad-TTS, we cannot train batch size 32 on a 24GB GPU without it
-        #   - Do not need this hack for Matcha-TTS, but it works with it as well
-        if not isinstance(out_size, type(None)):
-            max_offset = (y_lengths - out_size).clamp(0)
-            offset_ranges = list(zip([0] * max_offset.shape[0], max_offset.cpu().numpy()))
-            out_offset = torch.LongTensor(
-                [torch.tensor(random.choice(range(start, end)) if end > start else 0) for start, end in offset_ranges]
-            ).to(y_lengths)
-            attn_cut = torch.zeros(attn.shape[0], attn.shape[1], out_size, dtype=attn.dtype, device=attn.device)
-            y_cut = torch.zeros(y.shape[0], self.n_feats, out_size, dtype=y.dtype, device=y.device)
+        from matcha.text import _id_to_symbol
+#        start = 0
+#        for i in range(x_lengths[0]):
+#             print (f"{_id_to_symbol[x_orig[0,0,i].item()]} {start * 256. / 22050:.4f} {start} {int(logw_[0,0,i].item())}")
+#             start = start + logw_[0,0,i].item()
 
-            y_cut_lengths = []
-            for i, (y_, out_offset_) in enumerate(zip(y, out_offset)):
-                y_cut_length = out_size + (y_lengths[i] - out_size).clamp(None, 0)
-                y_cut_lengths.append(y_cut_length)
-                cut_lower, cut_upper = out_offset_, out_offset_ + y_cut_length
-                y_cut[i, :, :y_cut_length] = y_[:, cut_lower:cut_upper]
-                attn_cut[i, :, :y_cut_length] = attn[i, :, cut_lower:cut_upper]
-
-            y_cut_lengths = torch.LongTensor(y_cut_lengths)
-            y_cut_mask = sequence_mask(y_cut_lengths).unsqueeze(1).to(y_mask)
-
-            attn = attn_cut
-            y = y_cut
-            y_mask = y_cut_mask
+        # dur_loss = self.dp.compute_loss(logw_, mu_dp, x_mask)
+        dur_loss = 0
 
         # Align encoded text with mel-spectrogram and get mu_y segment
-        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), x.transpose(1, 2))
         mu_y = mu_y.transpose(1, 2)
+
+        # Align encoded text with mel-spectrogram and get mu_y segment
+        # mu_y_mel = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_mel.transpose(1, 2))
+        # mu_y_mel = mu_y_mel.transpose(1, 2)
+        # prior_loss = torch.sum(((y - mu_y_mel) ** 2) * y_mask)
+        # prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
+        prior_loss = 0
 
         # CFG
         # mask content information for better diversity for flow-matching, separate masking for speaker and content
 
         cfg_rand = torch.rand(y.size(0), 1, device=y.device)
-        cfg_mask_spk = (cfg_rand > self.cfg_dropout)
-        cfg_mask = (cfg_rand > self.cfg_dropout * 2) | (cfg_rand < self.cfg_dropout)
-
-        spks = spks  * cfg_mask_spk + ~cfg_mask_spk * self.fake_speaker.repeat(y.size(0), 1)
+        cfg_mask = (cfg_rand > self.cfg_dropout)
+        spks = spks * cfg_mask + ~cfg_mask * self.fake_speaker.repeat(y.size(0), 1)
         cfg_mask = cfg_mask.unsqueeze(-1)
         mu_y_masked = mu_y  * cfg_mask + ~cfg_mask * self.fake_content.repeat(mu_y.size(0), 1, mu_y.size(-1))
 
         # Compute loss of the decoder
         diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y_masked, spks=spks, cond=cond)
         # diff_loss = 0
-
-        if self.prior_loss:
-            prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
-            prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
-        else:
-            prior_loss = 0
 
         return dur_loss, prior_loss, diff_loss, attn

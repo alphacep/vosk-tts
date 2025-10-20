@@ -126,11 +126,9 @@ torch.set_printoptions(profile="full")
 torch.set_printoptions(linewidth=200)
 
 def to_waveform(mel, vocoder, denoiser=None):
-#    print (mel)
-#   audio = vocoder(mel).clamp(-1, 1)
+
+#    audio = vocoder(mel).clamp(-1, 1)
     audio = vocoder.decode(mel).clamp(-1, 1)
-#    if denoiser is not None:
-#        audio = denoiser(audio.squeeze(), strength=0.00025).cpu().squeeze()
 
     return audio.cpu().squeeze()
 
@@ -388,7 +386,7 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
             bert=text_processed["bert"],
             length_scale=args.speaking_rate,
         )
-        output["waveform"] = to_waveform(output["mel"], vocoder, denoiser)
+        output["waveform"] = to_waveform(output["mel"], vocoder, denoiser) * 1.5 # Loudness
         # RTF with HiFiGAN
         t = (dt.datetime.now() - start_t).total_seconds()
         rtf_w = t * 22050 / (output["waveform"].shape[-1])
@@ -399,8 +397,8 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
 
         location = save_to_folder(base_name, output, args.output_folder)
 
-        output["waveform"] = to_waveform(output["mel_enc"], vocoder, denoiser)
-        location = save_to_folder(prior_base_name, output, args.output_folder)
+#        output["waveform"] = to_waveform(output["mel_enc"], vocoder, denoiser)
+#        location = save_to_folder(prior_base_name, output, args.output_folder)
 
         print(f"[+] Waveform saved: {location}")
 

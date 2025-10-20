@@ -181,19 +181,13 @@ class TextMelDataset(torch.utils.data.Dataset):
         return {"x": text, "y": mel, "spk": spk, "filepath": filepath, "x_text": cleaned_text, "durations": durations, "bert": bert}
 
     def get_durations(self, filepath, text):
-        filepath = Path(filepath)
-        data_dir, name = filepath.parent.parent, filepath.stem
+        durations = []
+        for line in open(filepath.replace(".wav", ".lab")):
+            items = line.split()
+            durations.append(int(items[-1]))
+        durs = torch.IntTensor(durations)
 
-        try:
-            dur_loc = data_dir / "durations" / f"{name}.npy"
-            durs = torch.from_numpy(np.load(dur_loc).astype(int))
-
-        except FileNotFoundError as e:
-            raise FileNotFoundError(
-                f"Tried loading the durations but durations didn't exist at {dur_loc}, make sure you've generate the durations first using: python matcha/utils/get_durations_from_trained_model.py \n"
-            ) from e
-
-        assert len(durs) == len(text), f"Length of durations {len(durs)} and text {len(text)} do not match"
+#        assert len(durs) == len(text), f"Length of durations {len(durs)} and text {len(text)} do not match"
 
         return durs
 
@@ -217,11 +211,11 @@ class TextMelDataset(torch.utils.data.Dataset):
     def get_text(self, text, aligned, add_blank=True):
 #        text_norm, cleaned_text = text_to_sequence(text, self.cleaners)
         text_norm, bert = text_to_sequence_aligned(text, aligned)
-        if self.add_blank:
-            text_norm = intersperse(text_norm, 0)
-        text_norm = torch.IntTensor(text_norm)
-        if self.add_blank:
-            bert = intersperse_bert(bert)
+#        if self.add_blank:
+#            text_norm = intersperse(text_norm, 0)
+        text_norm = torch.IntTensor(text_norm).T
+#        if self.add_blank:
+#            bert = intersperse_bert(bert)
         bert = torch.stack(bert, dim=0).T
 
         return text_norm, bert, text
@@ -246,7 +240,7 @@ class TextMelBatchCollate:
         n_feats = batch[0]["y"].shape[-2]
 
         y = torch.zeros((B, n_feats, y_max_length), dtype=torch.float32)
-        x = torch.zeros((B, x_max_length), dtype=torch.long)
+        x = torch.zeros((B, 5, x_max_length), dtype=torch.long)
         durations = torch.zeros((B, x_max_length), dtype=torch.long)
         bert = torch.zeros((B, 768, x_max_length), dtype=torch.float32)
 
@@ -258,7 +252,7 @@ class TextMelBatchCollate:
             y_lengths.append(y_.shape[-1])
             x_lengths.append(x_.shape[-1])
             y[i, :, : y_.shape[-1]] = y_
-            x[i, : x_.shape[-1]] = x_
+            x[i, :, : x_.shape[-1]] = x_
             spks.append(item["spk"])
             filepaths.append(item["filepath"])
             x_texts.append(item["x_text"])

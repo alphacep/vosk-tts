@@ -74,18 +74,19 @@ class TextEncoder(nn.Module):
             hidden_channels = 256,
             filter_channels = 1024,
             n_heads = 4,
-            n_layers = 2,
+            n_layers = 4,
             kernel_size = 3,
             p_dropout = 0.1,
             gin_channels = spk_emb_dim,
         )
+
 
         self.dp_encoder = Encoder(
             out_channels = 50,
             hidden_channels = 256,
             filter_channels = 1024,
             n_heads = 4,
-            n_layers = 2,
+            n_layers = 4,
             kernel_size = 3,
             p_dropout = 0.1,
             gin_channels = spk_emb_dim,
@@ -93,25 +94,47 @@ class TextEncoder(nn.Module):
 
         # 256 transformer dim
 
-        self.scale = 256 ** 0.5
-        self.emb = nn.Embedding(n_vocab, 256)
-        nn.init.normal_(self.emb.weight, 0.0, 256**-0.5)
+        self.scale = 192 ** 0.5
+        self.emb = nn.Embedding(n_vocab, 192)
+        nn.init.normal_(self.emb.weight, 0.0, 192**-0.5)
+
+        self.punc_scale = 16 ** 0.5
+        self.punc_emb = nn.Embedding(n_vocab, 16)
+        nn.init.normal_(self.punc_emb.weight, 0.0, 16**-0.5)
+
+
         self.bert_proj = torch.nn.Conv1d(768, 256, 1)
 
 
-    def forward(self, x, x_lengths, spks=None, bert=None):
+    def forward(self, x, x_lengths, spks=None, dur_spks=None, bert=None):
 
-        x = self.emb(x) * self.scale  # [b, t, h]
-        x = x.transpose(1, -1)  # [b, h, t]
-        x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype)
+        x0 = self.emb(x[:,0,:]) * self.scale  # [b, t, h]
+        x0 = x0.transpose(1, -1)  # [b, h, t]
+
+        x1 = self.punc_emb(x[:,1,:]) * self.punc_scale  # [b, t, h]
+        x1 = x1.transpose(1, -1)  # [b, h, t]
+
+        x2 = self.punc_emb(x[:,2,:]) * self.punc_scale  # [b, t, h]
+        x2 = x2.transpose(1, -1)  # [b, h, t]
+
+        x3 = self.punc_emb(x[:,3,:]) * self.punc_scale  # [b, t, h]
+        x3 = x3.transpose(1, -1)  # [b, h, t]
+
+        x4 = self.punc_emb(x[:,4,:]) * self.punc_scale  # [b, t, h]
+        x4 = x4.transpose(1, -1)  # [b, h, t]
+
+
+        x = torch.cat([x0, x1, x2, x3, x4], dim=1)
+#        print ("Input x", x.size())
+
+
+        x_mask = sequence_mask(x_lengths, x.size(-1)).unsqueeze(1).to(x.dtype)
 
         br = self.bert_proj(bert)
 
         x = x + br
 
-        x_dp = torch.detach(x)
-        x_dp, mu_dp = self.dp_encoder(x_dp, spks, x_mask)
+        x_mel, mu_mel = self.encoder(x, spks, x_mask)
+        x_dp, mu_dp = self.dp_encoder(x, dur_spks, x_mask)
 
-        x, mu = self.encoder(x, spks, x_mask)
-
-        return mu, x, mu_dp, x_dp, x_mask
+        return x, x_mel, mu_mel, x_dp, mu_dp, x_mask

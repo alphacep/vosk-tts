@@ -8,7 +8,7 @@ from lightning import LightningModule
 
 from matcha.cli import VOCODER_URLS, load_matcha, load_vocoder
 
-DEFAULT_OPSET = 15
+DEFAULT_OPSET = 17
 
 SEED = 1234
 random.seed(SEED)
@@ -25,9 +25,9 @@ class MatchaWithVocoder(LightningModule):
         self.matcha = matcha
         self.vocoder = vocoder
 
-    def forward(self, x, x_lengths, scales, spks=None):
-        mel, mel_lengths = self.matcha(x, x_lengths, scales, spks)
-        wavs = self.vocoder(mel).clamp(-1, 1)
+    def forward(self, x, x_lengths, scales, spks=None, bert=None, phone_duration_extra=None):
+        mel, mel_lengths = self.matcha(x, x_lengths, scales, spks, bert, phone_duration_extra)
+        wavs = self.vocoder.decode(mel).clamp(-1, 1)
         lengths = mel_lengths * 256
         return wavs.squeeze(1), lengths
 
@@ -38,7 +38,7 @@ def get_exportable_module(matcha, vocoder, n_timesteps):
     based on whether the vocoder is embedded in  the final graph
     """
 
-    def onnx_forward_func(x, x_lengths, scales, spks=None):
+    def onnx_forward_func(x, x_lengths, scales, spks=None, bert=None, phone_duration_extra=None):
         """
         Custom forward function for accepting
         scaler parameters as tensors
@@ -46,7 +46,8 @@ def get_exportable_module(matcha, vocoder, n_timesteps):
         # Extract scaler parameters from tensors
         temperature = scales[0]
         length_scale = scales[1]
-        output = matcha.synthesise(x, x_lengths, n_timesteps, temperature, spks, length_scale)
+        dp_temperature = scales[2]
+        output = matcha.synthesise(x, x_lengths, n_timesteps, temperature, dp_temperature, spks, bert, length_scale, phone_duration_extra)
         return output["mel"], output["mel_lengths"]
 
     # Monkey-patch Matcha's forward function
@@ -65,25 +66,34 @@ def get_inputs(is_multi_speaker):
     Create dummy inputs for tracing
     """
     dummy_input_length = 50
-    x = torch.randint(low=0, high=20, size=(1, dummy_input_length), dtype=torch.long)
+    x = torch.randint(low=0, high=20, size=(1, 5, dummy_input_length), dtype=torch.long)
     x_lengths = torch.LongTensor([dummy_input_length])
 
     # Scales
-    temperature = 0.667
+    temperature = 0.8
+    dp_temperature = 0.8
     length_scale = 1.0
-    scales = torch.Tensor([temperature, length_scale])
+    scales = torch.Tensor([temperature, dp_temperature, length_scale])
 
     model_inputs = [x, x_lengths, scales]
     input_names = [
-        "x",
-        "x_lengths",
+        "input",
+        "input_lengths",
         "scales",
     ]
 
     if is_multi_speaker:
         spks = torch.LongTensor([1])
         model_inputs.append(spks)
-        input_names.append("spks")
+        input_names.append("sid")
+ 
+    bert = torch.rand(1, 768, dummy_input_length)
+    model_inputs.append(bert)
+    input_names.append("bert")
+
+    phone_duration_extra = torch.rand(1, dummy_input_length)
+    model_inputs.append(phone_duration_extra)
+    input_names.append("phone_duration_extra")
 
     return tuple(model_inputs), input_names
 
@@ -138,8 +148,10 @@ def main():
 
     # Set dynamic shape for inputs/outputs
     dynamic_axes = {
-        "x": {0: "batch_size", 1: "time"},
-        "x_lengths": {0: "batch_size"},
+        "input": {0: "batch_size", 2: "time"},
+        "input_lengths": {0: "batch_size"},
+        "bert": {0: "batch_size", 2: "time"},
+        "phone_duration_extra": {0: "batch_size", 1: "time"},
     }
 
     if vocoder is None:
@@ -159,7 +171,7 @@ def main():
         )
 
     if is_multi_speaker:
-        dynamic_axes["spks"] = {0: "batch_size"}
+        dynamic_axes["sid"] = {0: "batch_size"}
 
     # Create the output directory (if not exists)
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)

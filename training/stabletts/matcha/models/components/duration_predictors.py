@@ -23,16 +23,21 @@ class DeterministicDurationPredictor(nn.Module):
         durations = torch.clamp_max(durations, max_phone_dur-1).long().squeeze(1)
         x_mask = x_mask.squeeze(1)
 
-        loss_dur = 0
+        loss_dur = 0 
         loss_ce = 0
         for dur, enc, mask in zip(durations, estimations, x_mask):
             dlen = sum(mask).long()
             enc = enc[:dlen, :]
-            dur = dur[:dlen]
+            dur = dur[:dlen].clamp(min=1)
+    
+            # Fix target boundary duration, could be rather random...
+            dur[0] = 10
+            dur[-2] = 10
+
             trg = torch.zeros_like(enc)
             for p in range(trg.shape[0]):
                 trg[p, :dur[p]] = 1
-            dur_pred = torch.sigmoid(enc).sum(axis=1)
+            dur_pred = torch.sigmoid(enc).sum(axis=1).clamp(min=1)
 #            print ("Predicted", dur_pred)
 #            print ("Target   ", dur)
             l1 = F.l1_loss(torch.log(dur_pred), torch.log(dur))
@@ -45,7 +50,9 @@ class DeterministicDurationPredictor(nn.Module):
         loss_ce /= durations.size(0)
         print ("Dur loss L1", loss_dur)
         print ("Dur loss CE", loss_ce)
-        return loss_dur + 20 * loss_ce
+        return loss_dur + 10 * loss_ce
+#        return loss_dur
+
  
 
 
