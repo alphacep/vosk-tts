@@ -138,17 +138,16 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         x, x_mel, mu_mel, x_dp, mu_dp, x_mask = self.encoder(x, x_lengths, spks, dur_spks, bert)
 
+
         # Get log-scaled token durations `logw`
         logw = self.dp(mu_dp, x_mask, dp_temperature)
 
         logw = torch.sigmoid(logw).sum(axis=1, keepdim=True)
 
-#        if (spks_orig[0].item() == 1):
-#            logw = logw * 1.1
-
-#        phone_duration_extra[0, 24] = 50
-
-        logw = torch.where(phone_duration_extra == 0, logw, phone_duration_extra)
+        if phone_duration_extra == None:
+            phone_duration_extra = torch.zeros(logw.size(), dtype=torch.float32, device=logw.device).squeeze(0)
+        else:
+            logw = torch.where(phone_duration_extra == 0, logw, phone_duration_extra)
 
         w_round = torch.round(logw * length_scale).clamp(min=1)
 

@@ -19,3 +19,4 @@ check_val_every_n_epoch: 1
 deterministic: False
 
 gradient_clip_val: 5.0
+accumulate_grad_batches: 4

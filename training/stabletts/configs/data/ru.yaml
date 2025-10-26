@@ -8,7 +8,7 @@ train_filelist_path: db/metadata-phones-ids.csv.train
 valid_filelist_path: db/metadata-phones-ids.csv.dev
 batch_size: 6
 add_blank: True
-n_spks: 5
+n_spks: 128
 data_statistics:
   mel_mean: -5.806578636169434
   mel_std: 2.454238176345825

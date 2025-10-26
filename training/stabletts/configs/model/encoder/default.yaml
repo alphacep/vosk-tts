@@ -9,7 +9,7 @@ encoder_params:
   kernel_size: 3
   p_dropout: 0.1
   spk_emb_dim: 128
-  n_spks: 5
+  n_spks: 128
   prenet: true
 
 duration_predictor_params:
