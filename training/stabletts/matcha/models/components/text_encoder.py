@@ -94,16 +94,16 @@ class TextEncoder(nn.Module):
 
         # 256 transformer dim
 
-        self.scale = 192 ** 0.5
-        self.emb = nn.Embedding(n_vocab, 192)
-        nn.init.normal_(self.emb.weight, 0.0, 192**-0.5)
+        self.scale = 160 ** 0.5
+        self.emb = nn.Embedding(n_vocab, 160)
+        nn.init.normal_(self.emb.weight, 0.0, 160**-0.5)
 
         self.punc_scale = 16 ** 0.5
         self.punc_emb = nn.Embedding(n_vocab, 16)
         nn.init.normal_(self.punc_emb.weight, 0.0, 16**-0.5)
 
-
-        self.bert_proj = torch.nn.Conv1d(768, 256, 1)
+        # We want to transform BERT into something useful, we also want to regularize bert vectors
+        self.bert_proj = nn.Sequential(torch.nn.Dropout(0.1), torch.nn.Linear(768, 32))
 
 
     def forward(self, x, x_lengths, spks=None, dur_spks=None, bert=None):
@@ -123,16 +123,15 @@ class TextEncoder(nn.Module):
         x4 = self.punc_emb(x[:,4,:]) * self.punc_scale  # [b, t, h]
         x4 = x4.transpose(1, -1)  # [b, h, t]
 
+        br = self.bert_proj(bert.transpose(1, -1)).transpose(1, -1)
 
-        x = torch.cat([x0, x1, x2, x3, x4], dim=1)
+#       Disable BERT here if needed
+#        br = br.mean(dim=1, keepdim=True).expand_as(br)
+
+        x = torch.cat([x0, x1, x2, x3, x4, br], dim=1)
 #        print ("Input x", x.size())
 
-
         x_mask = sequence_mask(x_lengths, x.size(-1)).unsqueeze(1).to(x.dtype)
-
-        br = self.bert_proj(bert)
-
-        x = x + br
 
         x_mel, mu_mel = self.encoder(x, spks, x_mask)
         x_dp, mu_dp = self.dp_encoder(x, dur_spks, x_mask)
