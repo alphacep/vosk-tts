@@ -1,12 +1,12 @@
-import json
-import numpy as np
-import onnxruntime
-import wave
-import time
-import re
 import logging
+import re
+import time
+import wave
+
+import numpy as np
 
 from .g2p import convert
+
 
 class Synth:
 
@@ -178,6 +178,8 @@ class Synth:
         phoneme_ids = [phoneme_id_map[phonemes[0]]]
         phone_embeddings_is = [phone_embeddings[0]]
         for i in range(1, len(phonemes)):
+            if phonemes[i] not in phoneme_id_map:
+                continue
             phoneme_ids.append(0)
             phoneme_ids.append(phoneme_id_map[phonemes[i]])
             phone_embeddings_is.append(phone_embeddings[i])
@@ -213,7 +215,7 @@ class Synth:
 
         # Convert to ids and intersperse with blank
         phoneme_id_map = self.model.config["phoneme_id_map"]
-        phoneme_ids = [phoneme_id_map[p] for p in phonemes]
+        phoneme_ids = [phoneme_id_map[p] for p in phonemes if p in phoneme_id_map]
 
         logging.info(f"Text: {text}")
         logging.info(f"Phonemes: {phonemes}")
@@ -242,11 +244,15 @@ class Synth:
             phoneme_ids = []
             phoneme_ids.extend(phoneme_id_map[phonemes[0]])
             for i in range(1, len(phonemes)):
+                if phonemes[i] not in phoneme_id_map:
+                    continue
                 phoneme_ids.append(0)
                 phoneme_ids.extend(phoneme_id_map[phonemes[i]])
         else:
             phoneme_ids = [phoneme_id_map[phonemes[0]]]
             for i in range(1, len(phonemes)):
+                if phonemes[i] not in phoneme_id_map:
+                    continue
                 phoneme_ids.append(0)
                 phoneme_ids.append(phoneme_id_map[phonemes[i]])
 
@@ -273,7 +279,7 @@ class Synth:
     def g2p_multistream(self, text, bert_embeddings, word_pos=False):
         phonemes = [("^", [], 0, 0)]
 
-        pattern = "(\.\.\.|- |[ ,.?!;:\"()])"
+        pattern = r"(\.\.\.|- |[ ,.?!;:\"()])"
         text = text.replace(" -", "- ") # Unify dash with other punctuations
 
         in_quote = 0
@@ -330,6 +336,8 @@ class Synth:
         phoneme_id_map = self.model.config["phoneme_id_map"]
 
         for p in reversed(phonemes):
+            if p[0] not in phoneme_id_map:
+                continue
             if "..." in p[1]:
                 last_sentence_punc = "..."
             elif "." in p[1]:
@@ -361,7 +369,7 @@ class Synth:
     def g2p_multistream_scales(self, text, bert_embeddings):
         phonemes = [("^", [], 0, 0)]
 
-        pattern = "(\.\.\.|- |[ ,.?!;:\"()_])"
+        pattern = r"(\.\.\.|- |[ ,.?!;:\"()_])"
         text = text.replace(" -", "- ") # Unify dash with other punctuations
 
         in_quote = 0
@@ -418,6 +426,8 @@ class Synth:
         phoneme_id_map = self.model.config["phoneme_id_map"]
 
         for p in reversed(phonemes):
+            if p[0] not in phoneme_id_map:
+                continue
             if "..." in p[1]:
                 last_sentence_punc = "..."
             elif "." in p[1]:
